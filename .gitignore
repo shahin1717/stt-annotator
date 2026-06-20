@@ -11,3 +11,8 @@ transcripts/*
 # Ignore all files in finished/ except .gitkeep
 finished/*
 !finished/.gitkeep
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
