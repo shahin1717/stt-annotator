@@ -4,7 +4,7 @@ A high-performance, lightweight, local web-based Speech-to-Text (STT) transcript
 
 ---
 
-## ✨ Features
+## ✨ Features & Functions
 
 - **Manual Annotation & Correction**:
   - Edit speaker segment text inline with real-time change tracking.
@@ -12,10 +12,11 @@ A high-performance, lightweight, local web-based Speech-to-Text (STT) transcript
   - Editable timestamps (`MM:SS → MM:SS`) with format validation.
   - Add and delete segments on the fly.
 - **AI-Powered Corrections (Gemini)**:
-  - Supports the latest Gemini models: **Gemini 3.5 Flash**, **Gemini 3.1 Pro Preview**, **Gemini 2.5 Pro**, and **Gemini 2.5 Flash**.
+  - Supports the latest Gemini models: **Gemini 3.5 Flash** (recommended flagship), **Gemini 3.1 Pro Preview**, **Gemini 2.5 Pro**, and **Gemini 2.5 Flash**.
   - Dynamic rules ingestion: reads transcription guidelines directly from `ai/rules.md` (e.g., standardizing spelling, filtering filler words, background noise tags like `[fon_küyü]`).
   - High-precision minimal edit constraints: only updates rule violations without changing core dialect/phrasing.
   - Visual change comparison: displays the original text alongside corrected segments.
+  - **Reconstruction Overlay**: Displays a backdrop-blur loading state with the message `Transcripts is under reconstruction…` while the AI processes corrections.
 - **Custom Audio Player**:
   - Auto-mapped audio streams synced with segment clicks.
   - Keyboard shortcuts for hands-free playback controls.
@@ -24,6 +25,10 @@ A high-performance, lightweight, local web-based Speech-to-Text (STT) transcript
   - Real-time batch progress bar tracks completion.
   - Separate, collapsible **Finished** panel containing reviewed files.
   - Quick **Re-queue (↩)** action to move files back into the active queue.
+  - **Draft Save (Save Draft)**: Save partial edits to a separate drafts folder. Shows a `working` badge next to the file in the queue.
+  - **Semantic Comparison**: Checks if a draft has actual differences compared to the original before assigning the `working` badge. Reverting edits clears the badge and cleans up the draft automatically.
+- **Privacy Mode (👁️ Blur Text)**:
+  - Toggles a visual CSS blur filter over all text area content, blocking screen visibility for privacy while editing or showing screens.
 
 ---
 
@@ -53,7 +58,26 @@ Transcripts must be in Newline-Delimited JSON (JSONL) format:
 {"start_time": "00:02", "end_time": "00:05", "speaker": "Operator", "text": "Alo, hər vaxtınız xeyir."}
 {"start_time": "00:05", "end_time": "00:08", "speaker": "Müştəri", "text": "Salam, hər vaxtınız xeyir."}
 ```
-*Note: Audio and transcript files are automatically matched by their base filename (e.g., `202501091637.jsonl` matches `202501091637.wav`).*
+*Note: Audio and transcript files are matched by their base filename (e.g., `202501091637.jsonl` matches `202501091637.wav`).*
+
+---
+
+## 🛠️ Backend API Endpoints
+
+The Flask backend (`app.py`) exposes the following endpoints:
+
+| Method | Route | Description |
+| :--- | :--- | :--- |
+| `GET` | `/` | Serves the HTML frontend interface. |
+| `GET` | `/api/samples` | Lists active transcripts in `transcripts/` (excluding those already in `finished/`). Includes a `status` field (`working` if a draft exists and has edits, otherwise `raw`). |
+| `GET` | `/api/finished` | Lists all finalized transcript filenames in `finished/`. |
+| `GET` | `/api/transcript/<name>` | Retrieves the transcript JSONL content. Fallback check order: `finished/` → `working/` (drafts) → `transcripts/` (original). |
+| `GET` | `/api/audio/<name>` | Serves the matching audio file for playback. |
+| `GET` | `/api/rules` | Reads and returns the Azerbaijani transcription guidelines from `ai/rules.md`. |
+| `POST` | `/api/save` | Finalizes a transcript. Writes content to `finished/` and deletes any matching draft from `working/`. |
+| `POST` | `/api/save_draft` | Saves partial edits to `working/` as a draft. |
+| `POST` | `/api/requeue` | Removes a completed file from `finished/`, returning it back to the active queue. |
+| `POST` | `/api/ai/correct` | Triggers LLM-based correction using the selected Gemini model and rules configuration. |
 
 ---
 
@@ -110,5 +134,6 @@ These shortcuts are active only when you are **not** typing inside input fields 
 
 1. **Upload Batch**: Drop raw `.jsonl` transcripts into `transcripts/` and `.wav` audios into `audio/`.
 2. **Launch & Correct**: Open the web application. You can review segments manually or press **✨ AI Correct** to run the selected Gemini model over the rules.
-3. **Verify & Save**: Listen to the audio to verify corrections. Click **✓ Save to Finished** to move the file into `finished/`.
-4. **Final Export**: Once the queue is empty, grab your finalized transcript files from the `finished/` folder and upload them back to your storage system.
+3. **Save Progress**: If you are interrupted, click **Save Draft** to store your partial progress. The item will show as `working` in the queue.
+4. **Verify & Save**: Listen to the audio to verify corrections. Click **Save to Finished** to move the file into `finished/`.
+5. **Final Export**: Once the queue is empty, grab your finalized transcript files from the `finished/` folder and upload them back to your storage system.
