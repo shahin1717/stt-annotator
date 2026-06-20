@@ -36,6 +36,24 @@
   .ai-btn:active{transform:scale(.97)}
   .ai-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
 
+  .model-select{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:'Inter',sans-serif;font-size:12px;padding:8px 12px;outline:none;cursor:pointer;display:none;transition:all .15s}
+  .model-select:hover{border-color:var(--accent)}
+  .model-select:focus{border-color:var(--accent);box-shadow:0 0 8px rgba(232,164,74,.2)}
+
+
+  /* Rules Modal Styling */
+  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.85);display:none;align-items:center;justify-content:center;z-index:1000;opacity:0;transition:opacity .2s ease}
+  .modal-backdrop.show{display:flex;opacity:1}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;width:90%;max-width:650px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 10px 30px rgba(0,0,0,0.5);transform:translateY(20px);transition:transform .2s ease;overflow:hidden;will-change:transform}
+  .modal-backdrop.show .modal{transform:translateY(0)}
+  .modal-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+  .modal-title{font-size:14px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px}
+  .modal-close{background:transparent;border:none;color:var(--muted);font-size:22px;cursor:pointer;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:50%;transition:all .15s}
+  .modal-close:hover{background:var(--border);color:var(--text)}
+  .modal-body{padding:20px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch}
+  .modal-body::-webkit-scrollbar{width:4px}
+  .modal-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
 
   .main{display:grid;grid-template-columns:300px 1fr;gap:16px;padding:18px;max-width:1280px;margin:0 auto}
   @media(max-width:760px){.main{grid-template-columns:1fr}}
@@ -95,7 +113,14 @@
   .seg-speaker:hover{text-decoration:underline}
   .seg-speaker.op{color:var(--op)}
   .seg-speaker.cu{color:var(--cu)}
-  .seg-time{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)}
+  .seg-time{background:transparent;border:none;border-bottom:1px solid transparent;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:10.5px;outline:none;width:95px;padding:2px 0;transition:all .15s}
+  .seg-time:focus{border-bottom-color:var(--accent);color:var(--text)}
+  .seg-delete-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:10px;margin-top:auto;align-self:flex-start;opacity:0.3;transition:all .15s;padding:2px 4px;border-radius:4px}
+  .seg:hover .seg-delete-btn{opacity:0.8}
+  .seg-delete-btn:hover{color:var(--err);background:rgba(255, 69, 58, 0.1);opacity:1!important}
+  .seg-add-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:10px;margin-top:2px;align-self:flex-start;opacity:0.3;transition:all .15s;padding:2px 4px;border-radius:4px}
+  .seg:hover .seg-add-btn{opacity:0.8}
+  .seg-add-btn:hover{color:var(--accent);background:rgba(232, 164, 74, 0.1);opacity:1!important}
   textarea.seg-text{background:transparent;border:none;border-bottom:1px solid transparent;
     color:var(--text);font-family:'Inter',sans-serif;font-size:13px;line-height:1.65;
     width:100%;outline:none;resize:none;padding:2px 0;transition:border-color .15s}
@@ -134,6 +159,7 @@
   </div>
 
   <div style="display:flex;gap:10px;align-items:center">
+    <button class="btn ghost" style="padding:6px 12px;font-size:11px;background:rgba(232,164,74,0.08);color:var(--accent);border:1px solid rgba(232,164,74,0.2)" onclick="showRulesModal()">📋 Rules</button>
     <span class="badge" id="count-badge">loading…</span>
     <button class="btn ghost" style="padding:6px 12px;font-size:11px" onclick="loadSamples()">↺ Refresh</button>
   </div>
@@ -173,6 +199,16 @@
       <div class="clabel">Queue</div>
       <div class="queue" id="queue"><div class="empty">Loading…</div></div>
     </div>
+
+    <div class="card">
+      <div class="clabel" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleFinishedCollapse()">
+        <span>Finished</span>
+        <span id="finished-toggle" style="font-size:10px;opacity:0.8">▼</span>
+      </div>
+      <div class="queue" id="finished-queue" style="max-height:220px;overflow-y:auto;display:none;margin-top:5px">
+        <div class="empty">None yet</div>
+      </div>
+    </div>
   </div>
 
   <!-- right -->
@@ -188,11 +224,28 @@
     <div class="action">
       <button class="btn primary" id="save-btn" onclick="save()">✓ Save to Finished</button>
       <button class="btn ghost" onclick="skip()">Skip →</button>
+      <select class="model-select" id="model-select">
+        <option value="gemini-3.5-flash">Gemini 3.5 Flash (recommended)</option>
+        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
+        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+      </select>
       <button class="ai-btn" id="ai-btn" onclick="runAICorrection()">✨ AI Correct</button>
       <span class="edited-hint" id="edited-hint" style="display:none"></span>
     </div>
     <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">
       Click segment → jump to timestamp &nbsp;•&nbsp; Space = play/pause &nbsp;•&nbsp; ← → = ±5s
+    </div>
+  </div>
+<!-- Rules Modal -->
+<div class="modal-backdrop" id="rules-modal" onclick="closeRulesModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div class="modal-title" style="font-size:14px;font-weight:600">📋 Qaydalar (Transcription Rules)</div>
+      <button class="modal-close" onclick="closeRulesModal()">×</button>
+    </div>
+    <div class="modal-body" id="rules-content-area">
+      <div class="empty">Loading rules…</div>
     </div>
   </div>
 </div>
@@ -202,11 +255,79 @@
 
 <script>
 const audio = document.getElementById('audio');
-let samples = [], currentIdx = 0, segments = [], origTexts = [], origSpeakers = [];
+let samples = [], finishedList = [], segments = [];
+let currentSampleName = '';
+let isCurrentFromFinished = false;
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 let speedIdx = 2;
 const N = 36;
 let currentMode = 'manual';
+let origLength = 0;
+
+// ── Rules Modal ──────────────────────────────────────────────────────────
+async function showRulesModal() {
+  const modal = document.getElementById('rules-modal');
+  modal.style.display = 'flex';
+  modal.offsetHeight; // Force reflow
+  modal.classList.add('show');
+  
+  const contentArea = document.getElementById('rules-content-area');
+  try {
+    const res = await fetch('/api/rules').then(r => r.json());
+    if (res.ok && res.rules) {
+      contentArea.innerHTML = parseMarkdown(res.rules);
+    } else {
+      contentArea.innerHTML = `<div class="empty" style="color:var(--err)">Error loading rules: ${res.error}</div>`;
+    }
+  } catch (err) {
+    contentArea.innerHTML = `<div class="empty" style="color:var(--err)">Connection error loading rules</div>`;
+  }
+}
+
+function closeRulesModal(e) {
+  const modal = document.getElementById('rules-modal');
+  modal.classList.remove('show');
+  setTimeout(() => {
+    modal.style.display = 'none';
+  }, 200);
+}
+
+function parseMarkdown(md) {
+  let html = md
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  
+  const blocks = [];
+  html = html.replace(/```(?:json)?\s*([\s\S]*?)```/g, (match, code) => {
+    const placeholder = `__CODE_BLOCK_${blocks.length}__`;
+    blocks.push(`<pre style="background:var(--bg);border:1px solid var(--border);padding:12px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:11.5px;overflow-x:auto;margin:12px 0;white-space:pre-wrap;color:#e0e0e0;line-height:1.5">${code.trim()}</pre>`);
+    return placeholder;
+  });
+
+  const lines = html.split('\n');
+  const parsedLines = lines.map(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return '';
+    
+    if (trimmed.startsWith('__CODE_BLOCK_') && trimmed.endsWith('__')) {
+      const idx = parseInt(trimmed.replace('__CODE_BLOCK_', '').replace('__', ''), 10);
+      return blocks[idx];
+    }
+    
+    if (trimmed.startsWith('# ')) {
+      return `<h1 style="color:var(--accent);font-size:18px;margin:24px 0 12px;border-bottom:1px solid var(--border);padding-bottom:8px">${trimmed.slice(2)}</h1>`;
+    }
+    if (trimmed.startsWith('## ')) {
+      return `<h2 style="color:var(--accent);font-size:14px;margin:20px 0 8px;font-weight:600;letter-spacing:0.02em">${trimmed.slice(3)}</h2>`;
+    }
+    
+    let parsedLine = trimmed.replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--accent);font-weight:600">$1</strong>');
+    return `<p style="font-size:12.5px;line-height:1.6;margin-bottom:6px;color:var(--text);opacity:0.95">${parsedLine}</p>`;
+  });
+  
+  return parsedLines.filter(Boolean).join('\n');
+}
 
 function setMode(mode) {
   currentMode = mode;
@@ -215,16 +336,19 @@ function setMode(mode) {
   });
   
   const aiBtn = document.getElementById('ai-btn');
+  const modelSelect = document.getElementById('model-select');
   const transcriptCard = document.getElementById('transcript-card');
   
   if (mode === 'ai') {
     aiBtn.style.display = 'inline-block';
+    if (modelSelect) modelSelect.style.display = 'inline-block';
     if (transcriptCard) {
       transcriptCard.style.border = '1px solid var(--accent)';
       transcriptCard.style.boxShadow = '0 0 15px rgba(232, 164, 74, 0.15)';
     }
   } else {
     aiBtn.style.display = 'none';
+    if (modelSelect) modelSelect.style.display = 'none';
     if (transcriptCard) {
       transcriptCard.style.border = '1px solid var(--border)';
       transcriptCard.style.boxShadow = 'none';
@@ -238,18 +362,24 @@ async function runAICorrection() {
   aiBtn.textContent = '✨ AI Processing…';
   
   try {
+    const model = document.getElementById('model-select').value;
     const res = await fetch('/api/ai/correct', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ segments })
+      body: JSON.stringify({ segments, model })
     }).then(r => r.json());
     
     if (res.ok && res.segments) {
       // Update local segments with corrected values
-      segments = res.segments.map((seg, i) => ({
-        ...seg,
-        _i: i // preserve index
-      }));
+      segments = res.segments.map((seg, i) => {
+        const origSeg = segments[i] || {};
+        return {
+          ...seg,
+          _i: i,
+          _origText: '_origText' in origSeg ? origSeg._origText : seg.text,
+          _origSpeaker: '_origSpeaker' in origSeg ? origSeg._origSpeaker : seg.speaker
+        };
+      });
       
       // Re-render segments
       renderSegments();
@@ -259,7 +389,7 @@ async function runAICorrection() {
         segments.forEach((seg, i) => {
           const ta = document.querySelector(`#seg-${i} textarea.seg-text`);
           if (ta) {
-            ta.className = 'seg-text' + (ta.value !== origTexts[i] ? ' edited' : '');
+            ta.className = 'seg-text' + (ta.value !== seg._origText ? ' edited' : '');
             ta.rows = Math.max(1, Math.ceil(ta.value.length/58));
           }
         });
@@ -282,32 +412,50 @@ async function runAICorrection() {
 window.onload = () => { buildWaveform(); setupAudio(); setupKeys(); loadSamples(); };
 
 async function loadSamples() {
-  samples = await fetch('/api/samples').then(r => r.json());
+  const res = await fetch('/api/samples').then(r => r.json());
+  samples = res;
+  
+  const finRes = await fetch('/api/finished').then(r => r.json());
+  finishedList = finRes;
+  
   document.getElementById('count-badge').textContent = samples.length + ' remaining';
   renderQueue();
-  if (samples.length > 0) loadSample(0);
-  else document.getElementById('seg-list').innerHTML = '<div class="empty"><span style="font-size:32px">🎉</span>All done! Upload the finished/ folder to OneDrive.</div>';
+  renderFinishedQueue();
+  updateProgress();
+  
+  if (samples.length > 0 && !currentSampleName) {
+    loadSample(samples[0], false);
+  } else if (finishedList.length > 0 && !currentSampleName) {
+    loadSample(finishedList[0], true);
+  } else if (samples.length === 0 && finishedList.length === 0) {
+    document.getElementById('seg-list').innerHTML = '<div class="empty"><span style="font-size:32px">🎉</span>All done! Upload the finished/ folder to OneDrive.</div>';
+  }
 }
 
 // ── Load one sample ────────────────────────────────────────────────────────
-async function loadSample(idx) {
-  currentIdx = idx;
-  const name = samples[idx];
+async function loadSample(name, fromFinished = false) {
+  currentSampleName = name;
+  isCurrentFromFinished = fromFinished;
   audio.pause();
   document.getElementById('play-btn').textContent = '▶';
 
   // transcript
   const raw = await fetch(`/api/transcript/${name}`).then(r => r.text());
   segments = raw.trim().split('\n').map((line, i) => {
-    try { return {...JSON.parse(line), _i: i}; } catch { return null; }
+    try {
+      const s = JSON.parse(line);
+      return { ...s, _i: i, _origText: s.text, _origSpeaker: s.speaker };
+    } catch {
+      return null;
+    }
   }).filter(Boolean);
-  origTexts = segments.map(s => s.text);
-  origSpeakers = segments.map(s => s.speaker);
+  origLength = segments.length;
 
   document.getElementById('audio-name').textContent = name;
   document.getElementById('seg-count').textContent = segments.length;
   renderSegments();
   renderQueue();
+  renderFinishedQueue();
   updateProgress();
 
   // audio
@@ -318,9 +466,9 @@ async function loadSample(idx) {
 // ── Render ─────────────────────────────────────────────────────────────────
 function renderQueue() {
   const el = document.getElementById('queue');
-  if (!samples.length) { el.innerHTML = '<div class="empty">🎉 All done!</div>'; return; }
+  if (!samples.length) { el.innerHTML = '<div class="empty">Queue is empty</div>'; return; }
   el.innerHTML = samples.map((name, i) => `
-    <div class="qitem${i===currentIdx?' active':''}" onclick="loadSample(${i})">
+    <div class="qitem${(!isCurrentFromFinished && name===currentSampleName)?' active':''}" onclick="loadSample('${name}', false)">
       📄 <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</span>
       <span class="qnum">#${i+1}</span>
     </div>`).join('');
@@ -329,43 +477,100 @@ function renderQueue() {
 function renderSegments() {
   document.getElementById('seg-list').innerHTML = segments.map((seg, i) => {
     const op = seg.speaker === 'Operator' || seg.speaker?.toLowerCase().includes('operator');
-    const textChanged = seg.text !== origTexts[i];
-    const speakerChanged = seg.speaker !== origSpeakers[i];
+    const textChanged = seg.text !== seg._origText;
+    const speakerChanged = seg.speaker !== seg._origSpeaker;
     const showOrig = textChanged || speakerChanged;
     return `
     <div class="seg ${op?'op':'cu'}" id="seg-${i}" onclick="jumpTo(${i})">
       <div class="seg-meta">
         <span class="seg-speaker ${op?'op':'cu'}" onclick="toggleSpeaker(${i}, event)">${seg.speaker}</span>
-        <span class="seg-time">${seg.start_time} → ${seg.end_time}</span>
+        <input class="seg-time" value="${seg.start_time} → ${seg.end_time}" onchange="editTime(${i}, this)" onclick="event.stopPropagation()">
+        <button class="seg-delete-btn" onclick="deleteSegment(${i}, event)" title="Delete segment">🗑️ Delete</button>
+        <button class="seg-add-btn" onclick="addSegmentBelow(${i}, event)" title="Add segment below">➕ Add Below</button>
       </div>
       <div style="width:100%">
         <textarea class="seg-text${textChanged?' edited':''}" rows="${Math.max(1,Math.ceil(seg.text.length/58))}"
           oninput="editSeg(${i},this)" onclick="event.stopPropagation()">${seg.text}</textarea>
         <div class="seg-original" id="orig-${i}" style="display:${showOrig?'block':'none'}">
-          Original: ${origSpeakers[i]}: "${origTexts[i]}"
+          Original: ${seg._origSpeaker}: "${seg._origText}"
         </div>
       </div>
     </div>`;
   }).join('');
+  
   updateEditHint();
 }
 
 function updateProgress() {
-  const pct = samples.length ? (currentIdx/samples.length)*100 : 0;
+  const done = finishedList.length;
+  const total = samples.length + finishedList.length;
+  const pct = total ? (done / total) * 100 : 0;
+  
   document.getElementById('prog-fill').style.width = pct+'%';
-  document.getElementById('prog-done').textContent = currentIdx+' done';
-  document.getElementById('prog-total').textContent = samples.length+' total';
+  document.getElementById('prog-done').textContent = done+' done';
+  document.getElementById('prog-total').textContent = total+' total';
+}
+
+let isFinishedCollapsed = true;
+function toggleFinishedCollapse() {
+  const el = document.getElementById('finished-queue');
+  const toggle = document.getElementById('finished-toggle');
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    toggle.textContent = '▲';
+    isFinishedCollapsed = false;
+  } else {
+    el.style.display = 'none';
+    toggle.textContent = '▼';
+    isFinishedCollapsed = true;
+  }
+}
+
+function renderFinishedQueue() {
+  const el = document.getElementById('finished-queue');
+  if (!finishedList.length) { el.innerHTML = '<div class="empty">No finished files yet</div>'; return; }
+  el.innerHTML = finishedList.map((name, i) => `
+    <div class="qitem${(isCurrentFromFinished && name===currentSampleName)?' active':''}" onclick="loadSample('${name}', true)" style="border-left:3px solid var(--ok)">
+      📄 <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)">${name}</span>
+      <button class="icon-btn" style="width:24px;height:24px;font-size:10px;margin-left:5px;flex-shrink:0" onclick="requeue('${name}', event)" title="Re-queue (remove from finished)">↩</button>
+    </div>`).join('');
+}
+
+async function requeue(name, event) {
+  event.stopPropagation();
+  if (confirm(`Move "${name}" back to the active queue? This will remove it from the finished folder.`)) {
+    try {
+      const res = await fetch('/api/requeue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      }).then(r => r.json());
+      
+      if (res.ok) {
+        toast('Moved back to queue', 'ok');
+        if (currentSampleName === name) {
+          isCurrentFromFinished = false;
+        }
+        await loadSamples();
+      } else {
+        toast(res.error || 'Re-queue failed', 'err');
+      }
+    } catch (err) {
+      toast('Network error', 'err');
+    }
+  }
 }
 
 function editSeg(i, ta) {
-  segments[i].text = ta.value;
-  const textChanged = ta.value !== origTexts[i];
+  const seg = segments[i];
+  seg.text = ta.value;
+  const textChanged = ta.value !== seg._origText;
   ta.className = 'seg-text'+(textChanged?' edited':'');
   ta.rows = Math.max(1, Math.ceil(ta.value.length/58));
   
   const origEl = document.getElementById(`orig-${i}`);
   if (origEl) {
-    const speakerChanged = segments[i].speaker !== origSpeakers[i];
+    const speakerChanged = seg.speaker !== seg._origSpeaker;
     origEl.style.display = (textChanged || speakerChanged) ? 'block' : 'none';
   }
   updateEditHint();
@@ -392,19 +597,105 @@ function toggleSpeaker(i, event) {
     
     const origEl = document.getElementById(`orig-${i}`);
     if (origEl) {
-      const textChanged = seg.text !== origTexts[i];
-      const speakerChanged = newSpeaker !== origSpeakers[i];
+      const textChanged = seg.text !== seg._origText;
+      const speakerChanged = newSpeaker !== seg._origSpeaker;
       origEl.style.display = (textChanged || speakerChanged) ? 'block' : 'none';
     }
   }
   updateEditHint();
 }
 
+function editTime(i, input) {
+  const val = input.value.trim();
+  const match = val.match(/^(\d{1,2}:\d{2})\s*(?:→|->|-|to)\s*(\d{1,2}:\d{2})$/);
+  if (match) {
+    segments[i].start_time = match[1];
+    segments[i].end_time = match[2];
+    input.style.color = 'var(--muted)';
+    updateEditHint();
+  } else {
+    input.style.color = 'var(--err)';
+    toast('Invalid format. Use MM:SS → MM:SS', 'err');
+  }
+}
+
+function deleteSegment(i, event) {
+  event.stopPropagation();
+  if (confirm('Are you sure you want to delete this segment?')) {
+    segments.splice(i, 1);
+    // Re-index remaining segments
+    segments.forEach((seg, idx) => {
+      seg._i = idx;
+    });
+    renderSegments();
+    updateEditHint();
+  }
+}
+
+function addSegmentBelow(i, event) {
+  event.stopPropagation();
+  const currentSeg = segments[i];
+  const startTime = currentSeg.end_time || '00:00';
+  
+  let endTime = '00:00';
+  const match = startTime.match(/^(\d{1,2}):(\d{2})$/);
+  if (match) {
+    const mins = parseInt(match[1], 10);
+    const secs = parseInt(match[2], 10);
+    const totalSecs = mins * 60 + secs + 3;
+    const newMins = Math.floor(totalSecs / 60);
+    const newSecs = totalSecs % 60;
+    endTime = `${newMins.toString().padStart(2, '0')}:${newSecs.toString().padStart(2, '0')}`;
+  } else {
+    endTime = startTime;
+  }
+  
+  const isCurrentOp = currentSeg.speaker === 'Operator' || currentSeg.speaker?.toLowerCase().includes('operator');
+  const predictedSpeaker = isCurrentOp ? 'Müştəri' : 'Operator';
+  
+  const newSeg = {
+    start_time: startTime,
+    end_time: endTime,
+    speaker: predictedSpeaker,
+    text: '',
+    _origText: null,
+    _origSpeaker: null
+  };
+  
+  segments.splice(i + 1, 0, newSeg);
+  segments.forEach((seg, idx) => {
+    seg._i = idx;
+  });
+  renderSegments();
+  updateEditHint();
+}
+
+
+
 function updateEditHint() {
-  const n = segments.filter((s,i) => s.text !== origTexts[i] || s.speaker !== origSpeakers[i]).length;
+  const newSegments = segments.filter(s => s._origText === null || s._origText === undefined).length;
+  const modifiedSegments = segments.filter(s => s._origText !== null && s._origText !== undefined && (s.text !== s._origText || s.speaker !== s._origSpeaker)).length;
+  const remainingOriginals = segments.filter(s => s._origText !== null && s._origText !== undefined).length;
+  const deletedSegments = Math.max(0, origLength - remainingOriginals);
+  
+  const totalEdits = newSegments + modifiedSegments + deletedSegments;
   const h = document.getElementById('edited-hint');
-  if (n) { h.textContent = `${n} segment${n>1?'s':''} edited`; h.style.display=''; }
-  else h.style.display='none';
+  
+  if (totalEdits) {
+    let msg = `${totalEdits} edit${totalEdits>1?'s':''}`;
+    const details = [];
+    if (modifiedSegments > 0) details.push(`${modifiedSegments} modified`);
+    if (newSegments > 0) details.push(`${newSegments} added`);
+    if (deletedSegments > 0) details.push(`${deletedSegments} deleted`);
+    
+    if (details.length > 0) {
+      msg += ` (${details.join(', ')})`;
+    }
+    h.textContent = msg;
+    h.style.display = '';
+  } else {
+    h.style.display = 'none';
+  }
 }
 
 // ── Save / Skip ────────────────────────────────────────────────────────────
@@ -412,24 +703,52 @@ async function save() {
   const btn = document.getElementById('save-btn');
   btn.disabled = true; btn.textContent = 'Saving…';
 
-  const content = segments.map(({_i,...s}) => JSON.stringify(s)).join('\n');
+  const content = segments.map(({_i, _origText, _origSpeaker, ...s}) => JSON.stringify(s)).join('\n');
   const res = await fetch('/api/save', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name: samples[currentIdx], content})
+    body: JSON.stringify({name: currentSampleName, content})
   }).then(r=>r.json());
 
   btn.disabled = false; btn.textContent = '✓ Save to Finished';
 
-  if (res.ok) { toast('Saved ✓','ok'); next(); }
+  if (res.ok) { 
+    toast('Saved ✓','ok'); 
+    await loadSamples(); 
+    next(); 
+  }
   else toast('Save failed','err');
 }
 
-function skip() { toast('Skipped →'); next(); }
+function skip() { 
+  toast('Skipped →'); 
+  if (!isCurrentFromFinished) {
+    const curIdx = samples.indexOf(currentSampleName);
+    if (curIdx !== -1 && curIdx + 1 < samples.length) {
+      loadSample(samples[curIdx + 1], false);
+    } else {
+      toast('End of queue', 'ok');
+    }
+  } else {
+    const curIdx = finishedList.indexOf(currentSampleName);
+    if (curIdx !== -1 && curIdx + 1 < finishedList.length) {
+      loadSample(finishedList[curIdx + 1], true);
+    } else {
+      toast('End of finished list', 'ok');
+    }
+  }
+}
 
 function next() {
-  if (currentIdx+1 < samples.length) loadSample(currentIdx+1);
-  else { toast('All done! 🎉','ok'); loadSamples(); }
+  if (samples.length > 0) {
+    loadSample(samples[0], false);
+  } else if (finishedList.length > 0) {
+    toast('Queue is empty! Loading from Finished.', 'ok');
+    loadSample(finishedList[0], true);
+  } else {
+    toast('All done! 🎉','ok');
+    loadSamples();
+  }
 }
 
 // ── Player ─────────────────────────────────────────────────────────────────

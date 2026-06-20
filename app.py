@@ -47,10 +47,34 @@ def samples():
 def get_transcript(name):
     # try exact name first, then with .jsonl extension
     for fname in [name, name.replace(".json", ".jsonl")]:
+        f_path = os.path.join(FINISHED_DIR, fname)
+        if os.path.exists(f_path):
+            return open(f_path, encoding="utf-8").read(), 200, {"Content-Type": "application/json"}
         path = os.path.join(TRANSCRIPT_DIR, fname)
         if os.path.exists(path):
             return open(path, encoding="utf-8").read(), 200, {"Content-Type": "application/json"}
     return "Not found", 404
+
+@app.route("/api/finished")
+def get_finished():
+    """List all JSON/JSONL files in finished/."""
+    files = sorted([
+        f for f in os.listdir(FINISHED_DIR)
+        if (f.endswith(".json") or f.endswith(".jsonl"))
+    ])
+    return jsonify(files)
+
+@app.route("/api/requeue", methods=["POST"])
+def requeue():
+    data = request.json
+    name = data.get("name")
+    if not name:
+        return jsonify({"ok": False, "error": "Missing name parameter"}), 400
+    path = os.path.join(FINISHED_DIR, name)
+    if os.path.exists(path):
+        os.remove(path)
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "File not found in finished"}), 404
 
 @app.route("/api/audio/<name>")
 def get_audio(name):
@@ -60,6 +84,14 @@ def get_audio(name):
         if os.path.splitext(f)[0] == base:
             return send_file(os.path.join(AUDIO_DIR, f))
     return "Audio not found", 404
+
+@app.route("/api/rules")
+def get_rules():
+    rules_path = os.path.join(BASE, "ai", "rules.md")
+    if os.path.exists(rules_path):
+        with open(rules_path, encoding="utf-8") as f:
+            return jsonify({"ok": True, "rules": f.read()})
+    return jsonify({"ok": False, "error": "Rules file not found"}), 404
 
 @app.route("/api/save", methods=["POST"])
 def save():
@@ -71,92 +103,19 @@ def save():
         f.write(content)
     return jsonify({"ok": True})
 
-def load_env():
-    env_path = os.path.join(BASE, ".env")
-    if os.path.exists(env_path):
-        with open(env_path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if "=" in line and not line.startswith("#"):
-                    k, v = line.split("=", 1)
-                    os.environ[k.strip()] = v.strip()
-
-def call_gemini(system_instruction, user_content):
-    import urllib.request
-    import urllib.error
-    
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        return {"error": "GEMINI_API_KEY not found in environment or .env file"}
-    
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-    
-    payload = {
-        "systemInstruction": {
-            "parts": [{"text": system_instruction}]
-        },
-        "contents": [
-            {"parts": [{"text": user_content}]}
-        ],
-        "generationConfig": {
-            "responseMimeType": "application/json"
-        }
-    }
-    
-    req_data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=req_data,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
-    
-    try:
-        with urllib.request.urlopen(req, timeout=30) as response:
-            res_data = json.loads(response.read().decode("utf-8"))
-            text_out = res_data["candidates"][0]["content"]["parts"][0]["text"]
-            return {"success": True, "data": json.loads(text_out)}
-    except urllib.error.HTTPError as e:
-        try:
-            err_msg = e.read().decode("utf-8")
-        except Exception:
-            err_msg = str(e)
-        return {"error": f"API error: {e.code} - {err_msg}"}
-    except Exception as e:
-        return {"error": f"Connection error: {str(e)}"}
-
 @app.route("/api/ai/correct", methods=["POST"])
 def ai_correct():
     data = request.json
     segments = data.get("segments", [])
+    model = data.get("model", "gemini-3.5-flash")
     
-    load_env()
+    from ai.correct import run_ai_correction
+    ok, result = run_ai_correction(segments, model)
     
-    rules_path = os.path.join(BASE, "ai", "rules.md")
-    rules_content = ""
-    if os.path.exists(rules_path):
-        with open(rules_path, encoding="utf-8") as f:
-            rules_content = f.read()
-            
-    system_instruction = f"""
-    You are an expert Azerbaijani speech-to-text transcript corrector.
-    Correct the transcription text and speaker labels for each segment in the input JSON array according to these rules:
-    
-    {rules_content}
-    
-    Constraints:
-    1. Do NOT change start_time or end_time.
-    2. Do NOT add extra segments or omit any segments; keep the original segment structure and ordering.
-    3. Return a clean, valid JSON array containing the corrected segments.
-    """
-    
-    user_content = json.dumps(segments)
-    res = call_gemini(system_instruction, user_content)
-    
-    if "error" in res:
-        return jsonify({"ok": False, "error": res["error"]})
+    if not ok:
+        return jsonify({"ok": False, "error": result})
         
-    return jsonify({"ok": True, "segments": res["data"]})
+    return jsonify({"ok": True, "segments": result})
 
 if __name__ == "__main__":
     print("\n✓ STT Annotator running → http://localhost:5000\n")

@@ -53,11 +53,11 @@ Tərəddüd səsləri yalnız bu qapalı siyahıdan etiketlə verilir: [ıı], [
 **Doğru:** "[ıı] mən [ee] karta baxım [hmm]"
 
 ## R8
-**Nitq Olmayan Hadisələr**
-Nitq olmayan hadisələr yalnız bu etiketlərlə verilir: [gülüş], [öskürək], [musiqi], [siqnal]. Tək başına olanda ayrıca seqment (text: '[musiqi]'), nitqin içində qısa olanda yerində yerləşdirilir. Nəfəs, fon küyü və xışıltı yazılmır.
+**Nitq Olmayan Hadisələr və Fon Küyü**
+Nitq olmayan hadisələr və fon küyü yalnız bu etiketlərlə verilir: [gülüş], [öskürək], [musiqi], [siqnal], [fon_küyü]. Tək başına olanda ayrıca seqment (məs. text: '[fon_küyü]' və ya '[musiqi]'), nitqin içində qısa olanda isə yerində yerləşdirilir. Xüsusilə Operator və Müştəri danışmayıb gözlədikdə fonda səs-küy yaranarsa, mütləq `[fon_küyü]` etiketi ilə yazılmalıdır. Nəfəs və xışıltı isə yazılmır.
 
-**Yanlış:** "(Nəfəs alır) [asqırıq] bəli (Xışıltı) doğrudur."
-**Doğru:** "Bəli [gülüş] doğrudur."
+**Yanlış:** "(Nəfəs alır) [asqırıq] bəli (Xışıltı) doğrudur." (və ya səssizlikdə fon küyünün yazılmaması)
+**Doğru:** "Bəli [gülüş] doğrudur." və ya danışmadıqları durğunluq zamanı: "[fon_küyü]"
 
 ## R9
 **Böyük Hərflər və Durğu İşarələri**
