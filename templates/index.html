@@ -23,6 +23,20 @@
   .logo span{font-size:14px;font-weight:600}
   .badge{font-size:11px;padding:3px 10px;border-radius:20px;background:var(--border);color:var(--muted)}
 
+  /* Mode Toggle & AI button */
+  .mode-toggle{display:flex;background:var(--border);border-radius:20px;padding:2px;gap:2px}
+  .btn-mode{background:transparent;border:none;border-radius:18px;color:var(--muted);
+    font-family:'Inter',sans-serif;font-weight:600;font-size:12px;padding:6px 14px;
+    cursor:pointer;transition:all .15s}
+  .btn-mode.active{background:var(--accent);color:#0F0F0F;box-shadow:0 0 8px rgba(232,164,74,.3)}
+  .btn-mode:hover:not(.active){color:var(--text)}
+
+  .ai-btn{background:transparent;border:1px solid var(--accent);color:var(--accent);padding:10px 18px;font-size:13px;display:none;border-radius:8px;font-family:'Inter',sans-serif;font-weight:600;cursor:pointer;transition:all .15s}
+  .ai-btn:hover{background:var(--adim);color:var(--text);box-shadow:0 0 12px rgba(232, 164, 74, 0.25)}
+  .ai-btn:active{transform:scale(.97)}
+  .ai-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+
+
   .main{display:grid;grid-template-columns:300px 1fr;gap:16px;padding:18px;max-width:1280px;margin:0 auto}
   @media(max-width:760px){.main{grid-template-columns:1fr}}
 
@@ -87,6 +101,7 @@
     width:100%;outline:none;resize:none;padding:2px 0;transition:border-color .15s}
   textarea.seg-text:focus{border-bottom-color:var(--accent)}
   textarea.seg-text.edited{border-bottom-color:var(--adim);color:#f0c070}
+  .seg-original{font-size:11px;color:#d09050;background:rgba(232,164,74,0.04);border-left:2.5px solid var(--accent);padding:4px 8px;margin-top:6px;border-radius:0 4px 4px 0;line-height:1.4;word-break:break-word}
 
   .action{display:flex;gap:9px;align-items:center;padding:14px 0 2px;border-top:1px solid var(--border);margin-top:10px}
   .edited-hint{font-size:11px;color:var(--accent)}
@@ -112,6 +127,11 @@
 
 <div class="bar">
   <div class="logo"><div class="dot"></div><span>STT Annotator</span></div>
+  
+  <div class="mode-toggle">
+    <button class="btn-mode active" data-mode="manual" onclick="setMode('manual')">Manual</button>
+    <button class="btn-mode" data-mode="ai" onclick="setMode('ai')">AI</button>
+  </div>
 
   <div style="display:flex;gap:10px;align-items:center">
     <span class="badge" id="count-badge">loading…</span>
@@ -156,7 +176,7 @@
   </div>
 
   <!-- right -->
-  <div class="card" style="display:flex;flex-direction:column">
+  <div class="card" id="transcript-card" style="display:flex;flex-direction:column;transition:border-color .3s, box-shadow .3s">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div class="clabel" style="margin-bottom:0">Transcript — <span id="seg-count">0</span> segments</div>
       <div style="font-size:11px;color:var(--muted);display:flex;gap:8px">
@@ -168,6 +188,7 @@
     <div class="action">
       <button class="btn primary" id="save-btn" onclick="save()">✓ Save to Finished</button>
       <button class="btn ghost" onclick="skip()">Skip →</button>
+      <button class="ai-btn" id="ai-btn" onclick="runAICorrection()">✨ AI Correct</button>
       <span class="edited-hint" id="edited-hint" style="display:none"></span>
     </div>
     <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">
@@ -185,6 +206,77 @@ let samples = [], currentIdx = 0, segments = [], origTexts = [], origSpeakers = 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 let speedIdx = 2;
 const N = 36;
+let currentMode = 'manual';
+
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.btn-mode').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+  });
+  
+  const aiBtn = document.getElementById('ai-btn');
+  const transcriptCard = document.getElementById('transcript-card');
+  
+  if (mode === 'ai') {
+    aiBtn.style.display = 'inline-block';
+    if (transcriptCard) {
+      transcriptCard.style.border = '1px solid var(--accent)';
+      transcriptCard.style.boxShadow = '0 0 15px rgba(232, 164, 74, 0.15)';
+    }
+  } else {
+    aiBtn.style.display = 'none';
+    if (transcriptCard) {
+      transcriptCard.style.border = '1px solid var(--border)';
+      transcriptCard.style.boxShadow = 'none';
+    }
+  }
+}
+
+async function runAICorrection() {
+  const aiBtn = document.getElementById('ai-btn');
+  aiBtn.disabled = true;
+  aiBtn.textContent = '✨ AI Processing…';
+  
+  try {
+    const res = await fetch('/api/ai/correct', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ segments })
+    }).then(r => r.json());
+    
+    if (res.ok && res.segments) {
+      // Update local segments with corrected values
+      segments = res.segments.map((seg, i) => ({
+        ...seg,
+        _i: i // preserve index
+      }));
+      
+      // Re-render segments
+      renderSegments();
+      
+      // Update styling class for all updated segments in textarea
+      setTimeout(() => {
+        segments.forEach((seg, i) => {
+          const ta = document.querySelector(`#seg-${i} textarea.seg-text`);
+          if (ta) {
+            ta.className = 'seg-text' + (ta.value !== origTexts[i] ? ' edited' : '');
+            ta.rows = Math.max(1, Math.ceil(ta.value.length/58));
+          }
+        });
+      }, 50);
+      
+      toast('AI correction applied!', 'ok');
+    } else {
+      toast(res.error || 'AI correction failed', 'err');
+    }
+  } catch (err) {
+    toast('Error connecting to AI service', 'err');
+    console.error(err);
+  } finally {
+    aiBtn.disabled = false;
+    aiBtn.textContent = '✨ AI Correct';
+  }
+}
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 window.onload = () => { buildWaveform(); setupAudio(); setupKeys(); loadSamples(); };
@@ -237,14 +329,22 @@ function renderQueue() {
 function renderSegments() {
   document.getElementById('seg-list').innerHTML = segments.map((seg, i) => {
     const op = seg.speaker === 'Operator' || seg.speaker?.toLowerCase().includes('operator');
+    const textChanged = seg.text !== origTexts[i];
+    const speakerChanged = seg.speaker !== origSpeakers[i];
+    const showOrig = textChanged || speakerChanged;
     return `
     <div class="seg ${op?'op':'cu'}" id="seg-${i}" onclick="jumpTo(${i})">
       <div class="seg-meta">
         <span class="seg-speaker ${op?'op':'cu'}" onclick="toggleSpeaker(${i}, event)">${seg.speaker}</span>
         <span class="seg-time">${seg.start_time} → ${seg.end_time}</span>
       </div>
-      <textarea class="seg-text" rows="${Math.max(1,Math.ceil(seg.text.length/58))}"
-        oninput="editSeg(${i},this)" onclick="event.stopPropagation()">${seg.text}</textarea>
+      <div style="width:100%">
+        <textarea class="seg-text${textChanged?' edited':''}" rows="${Math.max(1,Math.ceil(seg.text.length/58))}"
+          oninput="editSeg(${i},this)" onclick="event.stopPropagation()">${seg.text}</textarea>
+        <div class="seg-original" id="orig-${i}" style="display:${showOrig?'block':'none'}">
+          Original: ${origSpeakers[i]}: "${origTexts[i]}"
+        </div>
+      </div>
     </div>`;
   }).join('');
   updateEditHint();
@@ -259,8 +359,15 @@ function updateProgress() {
 
 function editSeg(i, ta) {
   segments[i].text = ta.value;
-  ta.className = 'seg-text'+(ta.value !== origTexts[i]?' edited':'');
+  const textChanged = ta.value !== origTexts[i];
+  ta.className = 'seg-text'+(textChanged?' edited':'');
   ta.rows = Math.max(1, Math.ceil(ta.value.length/58));
+  
+  const origEl = document.getElementById(`orig-${i}`);
+  if (origEl) {
+    const speakerChanged = segments[i].speaker !== origSpeakers[i];
+    origEl.style.display = (textChanged || speakerChanged) ? 'block' : 'none';
+  }
   updateEditHint();
 }
 
@@ -281,6 +388,13 @@ function toggleSpeaker(i, event) {
       speakerEl.classList.remove('op', 'cu');
       speakerEl.classList.add(newSpeaker === 'Operator' ? 'op' : 'cu');
       speakerEl.textContent = newSpeaker;
+    }
+    
+    const origEl = document.getElementById(`orig-${i}`);
+    if (origEl) {
+      const textChanged = seg.text !== origTexts[i];
+      const speakerChanged = newSpeaker !== origSpeakers[i];
+      origEl.style.display = (textChanged || speakerChanged) ? 'block' : 'none';
     }
   }
   updateEditHint();
