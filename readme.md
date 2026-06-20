@@ -35,6 +35,7 @@ Organize your workspace as follows:
 stt-local/
 ├── audio/          ← Put .wav / .mp3 files here
 ├── transcripts/    ← Put .jsonl transcript files here
+├── working/        ← Partial draft edits are saved here (auto-created)
 ├── finished/       ← Completed files are saved here (auto-created)
 ├── ai/
 │   ├── rules.md    ← Markdown file containing spelling & formatting rules

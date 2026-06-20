@@ -128,6 +128,20 @@
   textarea.seg-text.edited{border-bottom-color:var(--adim);color:#f0c070}
   .seg-original{font-size:11px;color:#d09050;background:rgba(232,164,74,0.04);border-left:2.5px solid var(--accent);padding:4px 8px;margin-top:6px;border-radius:0 4px 4px 0;line-height:1.4;word-break:break-word}
 
+  /* Privacy blur styling */
+  body.privacy-active textarea.seg-text,
+  body.privacy-active .seg-original {
+    filter: blur(6px);
+    pointer-events: none;
+  }
+  textarea.seg-text, .seg-original {
+    transition: filter 0.25s ease;
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
   .action{display:flex;gap:9px;align-items:center;padding:14px 0 2px;border-top:1px solid var(--border);margin-top:10px}
   .edited-hint{font-size:11px;color:var(--accent)}
 
@@ -160,6 +174,7 @@
 
   <div style="display:flex;gap:10px;align-items:center">
     <button class="btn ghost" style="padding:6px 12px;font-size:11px;background:rgba(232,164,74,0.08);color:var(--accent);border:1px solid rgba(232,164,74,0.2)" onclick="showRulesModal()">📋 Rules</button>
+    <button class="btn ghost" id="privacy-btn" style="padding:6px 12px;font-size:11px;border:1px solid var(--border)" onclick="togglePrivacyMode()">👁️ Blur Text</button>
     <span class="badge" id="count-badge">loading…</span>
     <button class="btn ghost" style="padding:6px 12px;font-size:11px" onclick="loadSamples()">↺ Refresh</button>
   </div>
@@ -212,7 +227,14 @@
   </div>
 
   <!-- right -->
-  <div class="card" id="transcript-card" style="display:flex;flex-direction:column;transition:border-color .3s, box-shadow .3s">
+  <div class="card" id="transcript-card" style="position:relative;display:flex;flex-direction:column;transition:border-color .3s, box-shadow .3s">
+    <!-- AI Reconstruction Loading Overlay -->
+    <div id="ai-loading-overlay" style="display:none; position:absolute; inset:0; background:rgba(15,15,15,0.7); backdrop-filter:blur(5px); z-index:15; align-items:center; justify-content:center; flex-direction:column; border-radius:12px; transition:all .3s">
+      <div style="font-family:'JetBrains Mono', monospace; font-size:13px; color:var(--accent); text-align:center; display:flex; flex-direction:column; align-items:center; gap:16px">
+        <span style="font-size:28px; animation: spin 1.5s linear infinite">✨</span>
+        <span style="letter-spacing:0.05em">Transcripts is under reconstruction…</span>
+      </div>
+    </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div class="clabel" style="margin-bottom:0">Transcript — <span id="seg-count">0</span> segments</div>
       <div style="font-size:11px;color:var(--muted);display:flex;gap:8px">
@@ -222,7 +244,8 @@
     </div>
     <div class="seg-list" id="seg-list"><div class="empty"><span style="font-size:32px;opacity:.3">📂</span>Select a file from the queue</div></div>
     <div class="action">
-      <button class="btn primary" id="save-btn" onclick="save()">✓ Save to Finished</button>
+      <button class="btn primary" id="save-btn" onclick="save()">Save to Finished</button>
+      <button class="btn ghost" id="draft-btn" onclick="saveDraft()" style="border: 1px solid var(--accent); color: var(--accent)">Save Draft</button>
       <button class="btn ghost" onclick="skip()">Skip →</button>
       <select class="model-select" id="model-select">
         <option value="gemini-3.5-flash">Gemini 3.5 Flash (recommended)</option>
@@ -361,6 +384,9 @@ async function runAICorrection() {
   aiBtn.disabled = true;
   aiBtn.textContent = '✨ AI Processing…';
   
+  const overlay = document.getElementById('ai-loading-overlay');
+  if (overlay) overlay.style.display = 'flex';
+  
   try {
     const model = document.getElementById('model-select').value;
     const res = await fetch('/api/ai/correct', {
@@ -405,6 +431,7 @@ async function runAICorrection() {
   } finally {
     aiBtn.disabled = false;
     aiBtn.textContent = '✨ AI Correct';
+    if (overlay) overlay.style.display = 'none';
   }
 }
 
@@ -424,7 +451,7 @@ async function loadSamples() {
   updateProgress();
   
   if (samples.length > 0 && !currentSampleName) {
-    loadSample(samples[0], false);
+    loadSample(samples[0].name, false);
   } else if (finishedList.length > 0 && !currentSampleName) {
     loadSample(finishedList[0], true);
   } else if (samples.length === 0 && finishedList.length === 0) {
@@ -438,6 +465,11 @@ async function loadSample(name, fromFinished = false) {
   isCurrentFromFinished = fromFinished;
   audio.pause();
   document.getElementById('play-btn').textContent = '▶';
+  
+  const saveBtn = document.getElementById('save-btn');
+  if (saveBtn) {
+    saveBtn.textContent = fromFinished ? 'Update Finished' : 'Save to Finished';
+  }
 
   // transcript
   const raw = await fetch(`/api/transcript/${name}`).then(r => r.text());
@@ -467,11 +499,15 @@ async function loadSample(name, fromFinished = false) {
 function renderQueue() {
   const el = document.getElementById('queue');
   if (!samples.length) { el.innerHTML = '<div class="empty">Queue is empty</div>'; return; }
-  el.innerHTML = samples.map((name, i) => `
-    <div class="qitem${(!isCurrentFromFinished && name===currentSampleName)?' active':''}" onclick="loadSample('${name}', false)">
-      📄 <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</span>
+  el.innerHTML = samples.map((s, i) => {
+    const isWorking = s.status === 'working';
+    return `
+    <div class="qitem${(!isCurrentFromFinished && s.name===currentSampleName)?' active':''}" onclick="loadSample('${s.name}', false)">
+      📄 <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name}</span>
+      ${isWorking ? '<span class="badge" style="background:var(--adim);color:var(--accent);border:1px solid rgba(232,164,74,0.3);margin-right:8px;padding:1px 6px">working</span>' : ''}
       <span class="qnum">#${i+1}</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function renderSegments() {
@@ -698,7 +734,7 @@ function updateEditHint() {
   }
 }
 
-// ── Save / Skip ────────────────────────────────────────────────────────────
+// ── Save / Skip / Drafts ───────────────────────────────────────────────────
 async function save() {
   const btn = document.getElementById('save-btn');
   btn.disabled = true; btn.textContent = 'Saving…';
@@ -710,7 +746,8 @@ async function save() {
     body: JSON.stringify({name: currentSampleName, content})
   }).then(r=>r.json());
 
-  btn.disabled = false; btn.textContent = '✓ Save to Finished';
+  btn.disabled = false;
+  btn.textContent = isCurrentFromFinished ? 'Update Finished' : 'Save to Finished';
 
   if (res.ok) { 
     toast('Saved ✓','ok'); 
@@ -720,12 +757,37 @@ async function save() {
   else toast('Save failed','err');
 }
 
+async function saveDraft() {
+  const btn = document.getElementById('draft-btn');
+  btn.disabled = true; btn.textContent = 'Saving Draft…';
+
+  const content = segments.map(({_i, _origText, _origSpeaker, ...s}) => JSON.stringify(s)).join('\n');
+  try {
+    const res = await fetch('/api/save_draft', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name: currentSampleName, content})
+    }).then(r=>r.json());
+
+    if (res.ok) { 
+      toast('Draft saved ✓','ok'); 
+      await loadSamples(); 
+    } else {
+      toast('Draft save failed','err');
+    }
+  } catch (err) {
+    toast('Draft save error','err');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Draft';
+  }
+}
+
 function skip() { 
   toast('Skipped →'); 
   if (!isCurrentFromFinished) {
-    const curIdx = samples.indexOf(currentSampleName);
+    const curIdx = samples.findIndex(s => s.name === currentSampleName);
     if (curIdx !== -1 && curIdx + 1 < samples.length) {
-      loadSample(samples[curIdx + 1], false);
+      loadSample(samples[curIdx + 1].name, false);
     } else {
       toast('End of queue', 'ok');
     }
@@ -741,7 +803,7 @@ function skip() {
 
 function next() {
   if (samples.length > 0) {
-    loadSample(samples[0], false);
+    loadSample(samples[0].name, false);
   } else if (finishedList.length > 0) {
     toast('Queue is empty! Loading from Finished.', 'ok');
     loadSample(finishedList[0], true);
@@ -811,6 +873,24 @@ function toast(msg,type=''){
   el.textContent=(type==='ok'?'✓ ':type==='err'?'✕ ':'→ ')+msg;
   el.className=`toast show${type?' '+type:''}`;
   clearTimeout(el._t); el._t=setTimeout(()=>el.className='toast',2800);
+}
+
+let privacyActive = false;
+function togglePrivacyMode() {
+  privacyActive = !privacyActive;
+  document.body.classList.toggle('privacy-active', privacyActive);
+  const btn = document.getElementById('privacy-btn');
+  if (privacyActive) {
+    btn.innerHTML = '👁️ Show Text';
+    btn.style.borderColor = 'var(--err)';
+    btn.style.color = 'var(--err)';
+    btn.style.background = 'rgba(255, 69, 58, 0.08)';
+  } else {
+    btn.innerHTML = '👁️ Blur Text';
+    btn.style.borderColor = '';
+    btn.style.color = '';
+    btn.style.background = '';
+  }
 }
 </script>
 </body>

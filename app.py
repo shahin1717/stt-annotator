@@ -22,25 +22,69 @@ BASE     = os.path.dirname(os.path.abspath(__file__))
 AUDIO_DIR       = os.path.join(BASE, "audio")
 TRANSCRIPT_DIR  = os.path.join(BASE, "transcripts")
 FINISHED_DIR    = os.path.join(BASE, "finished")
+WORKING_DIR     = os.path.join(BASE, "working")
 
 os.makedirs(AUDIO_DIR, exist_ok=True)
 os.makedirs(TRANSCRIPT_DIR, exist_ok=True)
 os.makedirs(FINISHED_DIR, exist_ok=True)
+os.makedirs(WORKING_DIR, exist_ok=True)
 
 # ── Pages ──────────────────────────────────────────────────────────────────
 @app.route("/")
 def index():
     return render_template("index.html")
 
-# ── API ────────────────────────────────────────────────────────────────────
+def load_jsonl_segments(file_path):
+    try:
+        segments = []
+        with open(file_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    segments.append(json.loads(line))
+        return segments
+    except Exception:
+        return None
+
+def is_different(f1_path, f2_path):
+    s1 = load_jsonl_segments(f1_path)
+    s2 = load_jsonl_segments(f2_path)
+    if s1 is None or s2 is None:
+        return True
+    if len(s1) != len(s2):
+        return True
+    for seg1, seg2 in zip(s1, s2):
+        for key in ["start_time", "end_time", "speaker", "text"]:
+            if seg1.get(key) != seg2.get(key):
+                return True
+    return False
+
 @app.route("/api/samples")
 def samples():
-    """List all JSON files in transcripts/ that aren't already in finished/."""
+    """List all JSON files in transcripts/ that aren't already in finished/ with draft status."""
     done = {os.path.basename(f) for f in glob.glob(os.path.join(FINISHED_DIR, "*.json*"))}
-    files = sorted([
-        f for f in os.listdir(TRANSCRIPT_DIR)
-        if (f.endswith(".json") or f.endswith(".jsonl")) and f not in done
-    ])
+    working = {os.path.basename(f) for f in glob.glob(os.path.join(WORKING_DIR, "*.json*"))}
+    
+    files = []
+    for f in sorted(os.listdir(TRANSCRIPT_DIR)):
+        if (f.endswith(".json") or f.endswith(".jsonl")) and f not in done:
+            is_working = False
+            if f in working:
+                w_path = os.path.join(WORKING_DIR, f)
+                t_path = os.path.join(TRANSCRIPT_DIR, f)
+                if os.path.exists(w_path) and os.path.exists(t_path):
+                    if is_different(w_path, t_path):
+                        is_working = True
+                    else:
+                        try:
+                            os.remove(w_path)
+                        except Exception:
+                            pass
+            
+            files.append({
+                "name": f,
+                "status": "working" if is_working else "raw"
+            })
     return jsonify(files)
 
 @app.route("/api/transcript/<name>")
@@ -50,6 +94,9 @@ def get_transcript(name):
         f_path = os.path.join(FINISHED_DIR, fname)
         if os.path.exists(f_path):
             return open(f_path, encoding="utf-8").read(), 200, {"Content-Type": "application/json"}
+        w_path = os.path.join(WORKING_DIR, fname)
+        if os.path.exists(w_path):
+            return open(w_path, encoding="utf-8").read(), 200, {"Content-Type": "application/json"}
         path = os.path.join(TRANSCRIPT_DIR, fname)
         if os.path.exists(path):
             return open(path, encoding="utf-8").read(), 200, {"Content-Type": "application/json"}
@@ -99,6 +146,22 @@ def save():
     name    = data["name"]
     content = data["content"]
     out = os.path.join(FINISHED_DIR, name)
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(content)
+        
+    # Delete from working folder if it exists since it's now finalized
+    w_path = os.path.join(WORKING_DIR, name)
+    if os.path.exists(w_path):
+        os.remove(w_path)
+        
+    return jsonify({"ok": True})
+
+@app.route("/api/save_draft", methods=["POST"])
+def save_draft():
+    data = request.json
+    name    = data["name"]
+    content = data["content"]
+    out = os.path.join(WORKING_DIR, name)
     with open(out, "w", encoding="utf-8") as f:
         f.write(content)
     return jsonify({"ok": True})
