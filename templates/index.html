@@ -36,6 +36,18 @@
   .ai-btn:active{transform:scale(.97)}
   .ai-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
 
+  .fix-times-btn{background:transparent;border:1px solid var(--op);color:var(--op);padding:10px 18px;font-size:13px;border-radius:8px;font-family:'Inter',sans-serif;font-weight:600;cursor:pointer;transition:all .15s}
+  .fix-times-btn:hover{background:rgba(107,159,228,0.15);box-shadow:0 0 12px rgba(107,159,228,0.25)}
+  .fix-times-btn:active{transform:scale(.97)}
+  .fix-times-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+
+  .ai-audio-btn{background:transparent;border:1px solid var(--ok);color:var(--ok);padding:10px 18px;font-size:13px;display:none;border-radius:8px;font-family:'Inter',sans-serif;font-weight:600;cursor:pointer;transition:all .15s}
+  .ai-audio-btn:hover{background:rgba(48,209,88,0.12);box-shadow:0 0 12px rgba(48,209,88,0.25)}
+  .ai-audio-btn:active{transform:scale(.97)}
+  .ai-audio-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+
+
+
   .model-select{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:'Inter',sans-serif;font-size:12px;padding:8px 12px;outline:none;cursor:pointer;display:none;transition:all .15s}
   .model-select:hover{border-color:var(--accent)}
   .model-select:focus{border-color:var(--accent);box-shadow:0 0 8px rgba(232,164,74,.2)}
@@ -253,7 +265,9 @@
         <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
         <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
       </select>
-      <button class="ai-btn" id="ai-btn" onclick="runAICorrection()">✨ AI Correct</button>
+      <button class="ai-btn" id="ai-btn" onclick="runAICorrection(false)">✨ AI Correct</button>
+      <button class="ai-audio-btn" id="ai-audio-btn" onclick="runAICorrection(true)">✨ AI + Audio</button>
+      <button class="fix-times-btn" id="adjust-times-btn" onclick="runTimestampAdjustment()">🕒 Fix Overlaps</button>
       <span class="edited-hint" id="edited-hint" style="display:none"></span>
     </div>
     <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">
@@ -359,11 +373,13 @@ function setMode(mode) {
   });
   
   const aiBtn = document.getElementById('ai-btn');
+  const aiAudioBtn = document.getElementById('ai-audio-btn');
   const modelSelect = document.getElementById('model-select');
   const transcriptCard = document.getElementById('transcript-card');
   
   if (mode === 'ai') {
     aiBtn.style.display = 'inline-block';
+    if (aiAudioBtn) aiAudioBtn.style.display = 'inline-block';
     if (modelSelect) modelSelect.style.display = 'inline-block';
     if (transcriptCard) {
       transcriptCard.style.border = '1px solid var(--accent)';
@@ -371,6 +387,7 @@ function setMode(mode) {
     }
   } else {
     aiBtn.style.display = 'none';
+    if (aiAudioBtn) aiAudioBtn.style.display = 'none';
     if (modelSelect) modelSelect.style.display = 'none';
     if (transcriptCard) {
       transcriptCard.style.border = '1px solid var(--border)';
@@ -379,10 +396,12 @@ function setMode(mode) {
   }
 }
 
-async function runAICorrection() {
+async function runAICorrection(useAudio = false) {
   const aiBtn = document.getElementById('ai-btn');
-  aiBtn.disabled = true;
-  aiBtn.textContent = '✨ AI Processing…';
+  const aiAudioBtn = document.getElementById('ai-audio-btn');
+  
+  if (aiBtn) { aiBtn.disabled = true; aiBtn.textContent = '✨ AI Processing…'; }
+  if (aiAudioBtn) { aiAudioBtn.disabled = true; aiAudioBtn.textContent = '✨ AI + Audio Processing…'; }
   
   const overlay = document.getElementById('ai-loading-overlay');
   if (overlay) overlay.style.display = 'flex';
@@ -392,7 +411,7 @@ async function runAICorrection() {
     const res = await fetch('/api/ai/correct', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ segments, model, name: currentSampleName })
+      body: JSON.stringify({ segments, model, name: currentSampleName, use_audio: useAudio })
     }).then(r => r.json());
     
     if (res.ok && res.segments) {
@@ -440,11 +459,45 @@ async function runAICorrection() {
     toast('Error connecting to AI service', 'err');
     console.error(err);
   } finally {
-    aiBtn.disabled = false;
-    aiBtn.textContent = '✨ AI Correct';
+    if (aiBtn) { aiBtn.disabled = false; aiBtn.textContent = '✨ AI Correct'; }
+    if (aiAudioBtn) { aiAudioBtn.disabled = false; aiAudioBtn.textContent = '✨ AI + Audio'; }
     if (overlay) overlay.style.display = 'none';
   }
 }
+
+async function runTimestampAdjustment() {
+  const btn = document.getElementById('adjust-times-btn');
+  btn.disabled = true; btn.textContent = '🕒 Adjusting…';
+  
+  try {
+    const res = await fetch('/api/ai/adjust_timestamps', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ segments, name: currentSampleName })
+    }).then(r => r.json());
+    
+    if (res.ok && res.segments) {
+      segments = res.segments.map((seg, i) => {
+        return {
+          ...seg,
+          _i: i,
+          _origText: segments[i] ? ('_origText' in segments[i] ? segments[i]._origText : segments[i].text) : seg.text,
+          _origSpeaker: segments[i] ? ('_origSpeaker' in segments[i] ? segments[i]._origSpeaker : segments[i].speaker) : seg.speaker
+        };
+      });
+      renderSegments();
+      toast('Timestamps adjusted!', 'ok');
+    } else {
+      toast(res.error || 'Failed to adjust timestamps', 'err');
+    }
+  } catch (err) {
+    toast('Error adjusting timestamps', 'err');
+    console.error(err);
+  } finally {
+    btn.disabled = false; btn.textContent = '🕒 Fix Overlaps';
+  }
+}
+
 
 // ── Boot ───────────────────────────────────────────────────────────────────
 window.onload = () => { buildWaveform(); setupAudio(); setupKeys(); loadSamples(); };

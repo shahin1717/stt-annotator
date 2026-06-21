@@ -326,18 +326,43 @@ def ai_correct():
     segments = data.get("segments", [])
     model = data.get("model", "gemini-3.5-flash")
     name = data.get("name")
+    use_audio = data.get("use_audio", False)
     
     if name:
         original_segments = get_original_segments(name)
         segments = check_and_propagate_shifts(segments, original_segments)
+        
+    audio_path = None
+    if use_audio and name:
+        base = name.replace(".jsonl", "").replace(".json", "")
+        for f in os.listdir(AUDIO_DIR):
+            if os.path.splitext(f)[0] == base:
+                audio_path = os.path.join(AUDIO_DIR, f)
+                break
     
     from ai.correct import run_ai_correction
-    ok, result = run_ai_correction(segments, model)
+    ok, result = run_ai_correction(segments, model, audio_path=audio_path)
     
     if not ok:
+        print(f"\n❌ [AI Error] correction failed for file '{name or 'unknown'}': {result}\n")
         return jsonify({"ok": False, "error": result})
         
     return jsonify({"ok": True, "segments": result})
+
+@app.route("/api/ai/adjust_timestamps", methods=["POST"])
+def adjust_timestamps():
+    data = request.json
+    segments = data.get("segments", [])
+    name = data.get("name")
+    
+    if not name:
+        return jsonify({"ok": False, "error": "Missing name"}), 400
+        
+    original_segments = get_original_segments(name)
+    adjusted_segments = check_and_propagate_shifts(segments, original_segments)
+    
+    return jsonify({"ok": True, "segments": adjusted_segments})
+
 
 
 if __name__ == "__main__":

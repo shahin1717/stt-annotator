@@ -17,19 +17,54 @@ def load_env():
                     k, v = line.split("=", 1)
                     os.environ[k.strip()] = v.strip()
 
-def call_gemini(system_instruction, user_content, model="gemini-3.5-flash"):
+def get_audio_mime_type(file_path):
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".wav":
+        return "audio/wav"
+    elif ext == ".mp3":
+        return "audio/mp3"
+    elif ext in [".ogg", ".oga"]:
+        return "audio/ogg"
+    elif ext == ".aac":
+        return "audio/aac"
+    elif ext == ".flac":
+        return "audio/flac"
+    elif ext == ".webm":
+        return "audio/webm"
+    return "audio/wav"
+
+def call_gemini(system_instruction, user_content, audio_path=None, model="gemini-3.5-flash"):
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         return {"error": "GEMINI_API_KEY not found in environment or .env file"}
     
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     
+    parts = []
+    if audio_path and os.path.exists(audio_path):
+        try:
+            import base64
+            with open(audio_path, "rb") as f:
+                audio_data = base64.b64encode(f.read()).decode("utf-8")
+            mime = get_audio_mime_type(audio_path)
+            parts.append({
+                "inlineData": {
+                    "mimeType": mime,
+                    "data": audio_data
+                }
+            })
+            print(f"[AI Info] Multimodal mode enabled. Sending audio file: {audio_path}")
+        except Exception as e:
+            print(f"[AI Warning] Failed to load audio file for Gemini: {str(e)}")
+            
+    parts.append({"text": user_content})
+    
     payload = {
         "systemInstruction": {
             "parts": [{"text": system_instruction}]
         },
         "contents": [
-            {"parts": [{"text": user_content}]}
+            {"parts": parts}
         ],
         "generationConfig": {
             "responseMimeType": "application/json"
@@ -118,7 +153,7 @@ def call_gemini(system_instruction, user_content, model="gemini-3.5-flash"):
                 continue
             return {"error": f"Connection error: {str(e)}"}
 
-def run_ai_correction(segments, model="gemini-3.5-flash"):
+def run_ai_correction(segments, model="gemini-3.5-flash", audio_path=None):
     load_env()
     
     rules_path = os.path.join(BASE, "ai", "rules.md")
@@ -126,6 +161,28 @@ def run_ai_correction(segments, model="gemini-3.5-flash"):
     if os.path.exists(rules_path):
         with open(rules_path, encoding="utf-8") as f:
             rules_content = f.read()
+            
+    if audio_path:
+        structure_instruction = """
+SEGMENT STRUCTURE — TIMESTAMPS & ALIGNMENT (Multimodal Audio Mode):
+Since you are provided with BOTH the raw audio file and the draft transcript, you MUST align and correct the segment timestamps to match the audio:
+1. Listen to the audio and verify that the segment timestamps (start_time and end_time) match the timing of the actual spoken words.
+2. If a segment's start_time or end_time is incorrect, offset, or covers long silent pauses (e.g., if a speaker finishes talking and there is 10 seconds of silence, do NOT let the segment drag into the silence—end it immediately when the speaker stops talking), adjust the timestamps to wrap tightly around the actual spoken speech.
+3. Ensure all segment timestamps remain chronologically sequential and do not overlap (except for speaker overlaps where both speak at once).
+"""
+    else:
+        structure_instruction = """
+SEGMENT STRUCTURE — DEFAULT vs EXCEPTIONS (Text-Only Mode):
+By default, do NOT change start_time or end_time, and do NOT add, merge, or omit segments — preserve the original segment structure and chronological ordering.
+
+The ONLY exceptions, where changing the segment structure is allowed:
+- A segment's (end_time - start_time) is STRICTLY GREATER than 30 seconds: split into multiple consecutive segments, each ≤ 30 seconds, spanning the exact original range. This does NOT apply to segments under 30 seconds — never split, merge, or restructure a segment that is already within the 30-second limit, regardless of its content.
+- Unclear/unintelligible audio mixed with clear speech in one segment: you may split out the unclear portion as its own segment with text "[unclear]".
+- Foreign-language phrase mixed with native speech in one segment: you may split out that portion as its own segment with text "[another_language]".
+- Entirely unintelligible segment: may be omitted from output if it has no usable content.
+
+Outside of these four cases, segment count, order, and timestamps must remain identical to the input.
+"""
             
     system_instruction = f"""
 You are an expert Azerbaijani speech-to-text transcript corrector.
@@ -141,25 +198,18 @@ CRITICAL INSTRUCTIONS (Strictness & Minimal Changes):
 4. If you are not 100% certain a change is required by a specific rule, do not make it. Silence (no edit) is always the safe default — over-editing is a worse outcome than under-editing.
 5. The vast majority of segments in a real transcript should come back byte-for-byte identical to the input. If you find yourself editing most or all segments, you are being too aggressive — stop and reconsider.
 
-SEGMENT STRUCTURE — DEFAULT vs EXCEPTIONS:
-By default, do NOT change start_time or end_time, and do NOT add, merge, or omit segments — preserve the original segment structure and chronological ordering.
-
-The ONLY exceptions, where changing the segment structure is allowed:
-- A segment's (end_time - start_time) is STRICTLY GREATER than 30 seconds: split into multiple consecutive segments, each ≤ 30 seconds, spanning the exact original range. This does NOT apply to segments under 30 seconds — never split, merge, or restructure a segment that is already within the 30-second limit, regardless of its content.
-- Unclear/unintelligible audio mixed with clear speech in one segment: you may split out the unclear portion as its own segment with text "[unclear]".
-- Foreign-language phrase mixed with native speech in one segment: you may split out that portion as its own segment with text "[another_language]".
-- Entirely unintelligible segment: may be omitted from output if it has no usable content.
-
-Outside of these four cases, segment count, order, and timestamps must remain identical to the input.
+{structure_instruction}
 
 OUTPUT FORMAT:
 Return ONLY a clean, valid JSON array containing the corrected segments. No explanations, no markdown, no extra text.
 """
     
     user_content = json.dumps(segments)
-    res = call_gemini(system_instruction, user_content, model)
+    res = call_gemini(system_instruction, user_content, audio_path, model)
     
     if "error" in res:
+        print(f"\n[AI Error] Gemini call failed for model '{model}':")
+        print(f"Details: {res['error']}\n")
         return False, res["error"]
         
     return True, res["data"]
