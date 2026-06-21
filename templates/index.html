@@ -396,14 +396,25 @@ async function runAICorrection() {
     }).then(r => r.json());
     
     if (res.ok && res.segments) {
+      // Map original segment texts by timestamps to align comparisons correctly if segments are split/restructured
+      const originalMap = {};
+      segments.forEach(orig => {
+        const key = `${orig.start_time}_${orig.end_time}`;
+        originalMap[key] = {
+          text: '_origText' in orig ? orig._origText : orig.text,
+          speaker: '_origSpeaker' in orig ? orig._origSpeaker : orig.speaker
+        };
+      });
+
       // Update local segments with corrected values
       segments = res.segments.map((seg, i) => {
-        const origSeg = segments[i] || {};
+        const key = `${seg.start_time}_${seg.end_time}`;
+        const matchedOrig = originalMap[key];
         return {
           ...seg,
           _i: i,
-          _origText: '_origText' in origSeg ? origSeg._origText : seg.text,
-          _origSpeaker: '_origSpeaker' in origSeg ? origSeg._origSpeaker : seg.speaker
+          _origText: matchedOrig ? matchedOrig.text : null,
+          _origSpeaker: matchedOrig ? matchedOrig.speaker : null
         };
       });
       

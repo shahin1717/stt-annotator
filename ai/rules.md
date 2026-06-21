@@ -53,11 +53,11 @@ Tərəddüd səsləri yalnız bu qapalı siyahıdan etiketlə verilir: [ıı], [
 **Doğru:** "[ıı] mən [ee] karta baxım [hmm]"
 
 ## R8
-**Nitq Olmayan Hadisələr və Fon Küyü**
-Nitq olmayan hadisələr və fon küyü yalnız bu etiketlərlə verilir: [gülüş], [öskürək], [musiqi], [siqnal], [fon_küyü]. Tək başına olanda ayrıca seqment (məs. text: '[fon_küyü]' və ya '[musiqi]'), nitqin içində qısa olanda isə yerində yerləşdirilir. Xüsusilə Operator və Müştəri danışmayıb gözlədikdə fonda səs-küy yaranarsa, mütləq `[fon_küyü]` etiketi ilə yazılmalıdır. Nəfəs və xışıltı isə yazılmır.
+**Nitq Olmayan Hadisələr**
+Nitq olmayan hadisələr yalnız bu etiketlərlə verilir: [gülüş], [öskürək], [musiqi], [siqnal]. Tək başına olanda ayrıca seqment (text: '[musiqi]'), nitqin içində qısa olanda yerində yerləşdirilir. Nəfəs, fon küyü və xışıltı yazılmır.
 
-**Yanlış:** "(Nəfəs alır) [asqırıq] bəli (Xışıltı) doğrudur." (və ya səssizlikdə fon küyünün yazılmaması)
-**Doğru:** "Bəli [gülüş] doğrudur." və ya danışmadıqları durğunluq zamanı: "[fon_küyü]"
+**Yanlış:** "(Nəfəs alır) [asqırıq] bəli (Xışıltı) doğrudur."
+**Doğru:** "Bəli [gülüş] doğrudur."
 
 ## R9
 **Böyük Hərflər və Durğu İşarələri**
@@ -111,3 +111,16 @@ Start və end time arasındakı vaxt intervalı maksimum 30 saniyə olmalıdır.
 
 **Yanlış:** "start_time: 00:01, end_time: 00:45 (44 saniyə)"
 **Doğru:** "start_time: 00:01, end_time: 00:30 (29 saniyə)"
+
+## R14
+**Fasilə Nöqtələri (...) — Vergül və ya Nöqtəyə Çevrilməsi**
+Mətndə "..." (üç nöqtə) işlədilmir. Danışıqdakı qısa fasilə (eyni fikrin davamı, fikirləşmə) vergül `,` ilə əvəz olunur. Əgər fasilədən sonra yeni, ayrı bir cümlə başlayırsa, nöqtə `.` qoyulur və yeni cümlə böyük hərflə başlayır. Təsadüfi və ya çoxsaylı nöqtələr ("....", "..") heç bir halda saxlanılmır.
+
+**Yanlış:** "Deyəsən.... kartım evdə qaldı"
+**Doğru:** "Deyəsən, kartım evdə qaldı."
+
+**Yanlış:** "Gözdə baxım..... Hə burdadı."
+**Doğru (fasilə + davam edən fikir, vergüllə):** "Gözdə baxım, hə burdadı."
+**Doğru (fasilə + ayrı cümlə, nöqtə ilə):** "Gözdə baxım. Hə burdadı."
+
+> Qeyd: Hansı formanın seçiləcəyi intonasiyadan asılıdır — əgər səsdə aydın fasilə var və ikinci hissə müstəqil fikirdirsə nöqtə, əgər fikir bir nəfəsdə davam edirsə vergül istifadə olunur.
