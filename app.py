@@ -74,6 +74,19 @@ def to_time_str(secs):
     s = int(secs) % 60
     return f"{m:02d}:{s:02d}"
 
+def serialize_segment(s):
+    ordered = {
+        "start_time": s.get("start_time", ""),
+        "end_time": s.get("end_time", ""),
+        "speaker": s.get("speaker", ""),
+        "text": s.get("text", "")
+    }
+    for k, v in s.items():
+        if k not in ordered:
+            ordered[k] = v
+    return json.dumps(ordered, ensure_ascii=False)
+
+
 def get_original_segments(name):
     path = os.path.join(TRANSCRIPT_DIR, name)
     if not os.path.exists(path):
@@ -282,7 +295,7 @@ def save():
     original_segments = get_original_segments(name)
     adjusted_segments = check_and_propagate_shifts(segments, original_segments)
     
-    content = "\n".join(json.dumps(s, ensure_ascii=False) for s in adjusted_segments)
+    content = "\n".join(serialize_segment(s) for s in adjusted_segments)
     
     out = os.path.join(FINISHED_DIR, name)
     with open(out, "w", encoding="utf-8") as f:
@@ -313,7 +326,7 @@ def save_draft():
     original_segments = get_original_segments(name)
     adjusted_segments = check_and_propagate_shifts(segments, original_segments)
     
-    content = "\n".join(json.dumps(s, ensure_ascii=False) for s in adjusted_segments)
+    content = "\n".join(serialize_segment(s) for s in adjusted_segments)
     
     out = os.path.join(WORKING_DIR, name)
     with open(out, "w", encoding="utf-8") as f:
