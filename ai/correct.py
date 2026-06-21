@@ -135,19 +135,20 @@ Rules:
 {rules_content}
 
 CRITICAL INSTRUCTIONS (Strictness & Minimal Changes):
-1. It is NOT mandatory to find and correct errors in every segment. Only make a correction if a segment explicitly violates one of the rules.
-2. Do NOT perform stylistic editing, paraphrase, or make unnecessary corrections to grammatically correct or standard Azerbaijani speech.
-3. If a segment's text and speaker conform to the rules, keep them EXACTLY as they are. Preserve original wording, word order, and phrasing unless it violates a specific rule (e.g., dialect normalization, number formatting, punctuation cleanup).
-4. Be extremely careful and conservative. Minimize changes.
+1. Do NOT edit a segment unless it CLEARLY and UNAMBIGUOUSLY violates one of the numbered rules above. When in doubt, leave it unchanged.
+2. Do NOT perform stylistic editing, paraphrasing, rewording, or "improving" grammatically correct or standard Azerbaijani speech — even if an alternative phrasing sounds more natural to you.
+3. Do NOT add, remove, or change punctuation/capitalization/words unless a specific rule explicitly requires it for that exact case. Casual spoken word order and repetition (e.g. "günləri" vs "gün") are NOT errors unless they match a documented dialect-normalization pattern in the rules.
+4. If you are not 100% certain a change is required by a specific rule, do not make it. Silence (no edit) is always the safe default — over-editing is a worse outcome than under-editing.
+5. The vast majority of segments in a real transcript should come back byte-for-byte identical to the input. If you find yourself editing most or all segments, you are being too aggressive — stop and reconsider.
 
 SEGMENT STRUCTURE — DEFAULT vs EXCEPTIONS:
 By default, do NOT change start_time or end_time, and do NOT add, merge, or omit segments — preserve the original segment structure and chronological ordering.
 
-The ONLY exceptions, where changing the segment structure is required:
-- Unclear/unintelligible audio: replace that segment's text with "[unclear]" (do not guess the words). If you judge the unclear portion needs separating from surrounding clear speech within the same original segment, you may split it into multiple segments with sub-divided timestamps, keeping the total span identical to the original segment's start_time/end_time.
-- Foreign-language phrases: same handling as unclear — split out a sub-segment with text "[another_language]" only if the foreign phrase is part of a larger mixed-language original segment.
-- Segments exceeding 30 seconds (end_time - start_time > 30s): split into multiple consecutive segments, each ≤ 30 seconds, with new internally-consistent timestamps that together span the exact original start_time to end_time. Do not invent gaps or overlaps.
-- Entirely unintelligible segments: if a segment is unclear in its entirety with no usable content, you may omit it from the output rather than including "[unclear]" as its only content — but do this rarely and only when justified by the rules.
+The ONLY exceptions, where changing the segment structure is allowed:
+- A segment's (end_time - start_time) is STRICTLY GREATER than 30 seconds: split into multiple consecutive segments, each ≤ 30 seconds, spanning the exact original range. This does NOT apply to segments under 30 seconds — never split, merge, or restructure a segment that is already within the 30-second limit, regardless of its content.
+- Unclear/unintelligible audio mixed with clear speech in one segment: you may split out the unclear portion as its own segment with text "[unclear]".
+- Foreign-language phrase mixed with native speech in one segment: you may split out that portion as its own segment with text "[another_language]".
+- Entirely unintelligible segment: may be omitted from output if it has no usable content.
 
 Outside of these four cases, segment count, order, and timestamps must remain identical to the input.
 
