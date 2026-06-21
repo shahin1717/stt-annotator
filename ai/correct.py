@@ -2,6 +2,8 @@ import os
 import json
 import urllib.request
 import urllib.error
+import re
+import time
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -42,34 +44,79 @@ def call_gemini(system_instruction, user_content, model="gemini-3.5-flash"):
         method="POST"
     )
     
-    try:
-        with urllib.request.urlopen(req, timeout=90) as response:
-            res_data = json.loads(response.read().decode("utf-8"))
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=90) as response:
+                res_data = json.loads(response.read().decode("utf-8"))
+                
+                if not res_data.get("candidates"):
+                    return {"error": f"No candidates returned by Gemini: {json.dumps(res_data)}"}
+                
+                candidate = res_data["candidates"][0]
+                if "content" not in candidate:
+                    finish_reason = candidate.get("finishReason", "UNKNOWN")
+                    return {"error": f"Gemini generation blocked. Reason/Status: {finish_reason}. Response: {json.dumps(res_data)}"}
+                
+                try:
+                    text_out = candidate["content"]["parts"][0]["text"].strip()
+                except (KeyError, IndexError):
+                    return {"error": f"Invalid content structure in candidate response: {json.dumps(res_data)}"}
+                
+                # Semantic JSON parsing
+                try:
+                    parsed_data = json.loads(text_out)
+                    return {"success": True, "data": parsed_data}
+                except json.JSONDecodeError:
+                    cleaned_text = text_out
+                    if cleaned_text.startswith("```"):
+                        lines = cleaned_text.splitlines()
+                        if len(lines) > 2:
+                            if lines[-1].strip() == "```":
+                                cleaned_text = "\n".join(lines[1:-1])
+                            else:
+                                cleaned_text = "\n".join(lines[1:])
+                        cleaned_text = cleaned_text.strip()
+                    
+                    try:
+                        parsed_data = json.loads(cleaned_text)
+                        return {"success": True, "data": parsed_data}
+                    except json.JSONDecodeError:
+                        # Fallback: extract JSON array or object using regex
+                        match = re.search(r'(\[[\s\S]*\]|\{[\s\S]*\})', text_out)
+                        if match:
+                            try:
+                                parsed_data = json.loads(match.group(1))
+                                return {"success": True, "data": parsed_data}
+                            except json.JSONDecodeError:
+                                pass
+                        return {"error": f"Failed to parse Gemini response as JSON. Raw response content: {text_out}"}
+        except urllib.error.HTTPError as e:
+            # Retry transient rate limits (429) or server errors (503/504)
+            if e.code in [429, 503, 504] and attempt < 2:
+                time.sleep(2 ** attempt)
+                continue
             
             try:
-                text_out = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            except KeyError:
-                return {"error": f"Invalid response structure from Gemini: {json.dumps(res_data)}"}
-            
-            # Strip markdown code blocks if present
-            if text_out.startswith("```"):
-                lines = text_out.splitlines()
-                if len(lines) > 2:
-                    if lines[-1].strip() == "```":
-                        text_out = "\n".join(lines[1:-1])
-                    else:
-                        text_out = "\n".join(lines[1:])
-                text_out = text_out.strip()
-                
-            return {"success": True, "data": json.loads(text_out)}
-    except urllib.error.HTTPError as e:
-        try:
-            err_msg = e.read().decode("utf-8")
-        except Exception:
-            err_msg = str(e)
-        return {"error": f"API error: {e.code} - {err_msg}"}
-    except Exception as e:
-        return {"error": f"Connection error: {str(e)}"}
+                err_msg = e.read().decode("utf-8")
+                # Parse error response to check for resource exhaustion
+                try:
+                    err_json = json.loads(err_msg)
+                    msg_detail = err_json.get("error", {}).get("message", "")
+                    status_str = err_json.get("error", {}).get("status", "")
+                    if status_str == "RESOURCE_EXHAUSTED" or "Quota exceeded" in msg_detail:
+                        return {
+                            "error": f"Quota Exceeded / Model Restricted (429). If using a Free Tier API Key, please switch the model dropdown to a Flash model (like 'Gemini 3.5 Flash' or 'Gemini 2.5 Flash') instead of 'Pro'.\n\nDetails: {msg_detail}"
+                        }
+                except Exception:
+                    pass
+            except Exception:
+                err_msg = str(e)
+            return {"error": f"API error: {e.code} - {err_msg}"}
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(1)
+                continue
+            return {"error": f"Connection error: {str(e)}"}
 
 def run_ai_correction(segments, model="gemini-3.5-flash"):
     load_env()
