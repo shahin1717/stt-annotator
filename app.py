@@ -59,6 +59,130 @@ def is_different(f1_path, f2_path):
                 return True
     return False
 
+def to_seconds(t_str):
+    if not t_str:
+        return 0
+    parts = t_str.split(":")
+    m = int(parts[0]) if len(parts) > 0 else 0
+    s = int(parts[1]) if len(parts) > 1 else 0
+    return m * 60 + s
+
+def to_time_str(secs):
+    if secs < 0:
+        secs = 0
+    m = int(secs) // 60
+    s = int(secs) % 60
+    return f"{m:02d}:{s:02d}"
+
+def get_original_segments(name):
+    path = os.path.join(TRANSCRIPT_DIR, name)
+    if not os.path.exists(path):
+        if name.endswith(".json"):
+            path = os.path.join(TRANSCRIPT_DIR, name.replace(".json", ".jsonl"))
+        elif name.endswith(".jsonl"):
+            path = os.path.join(TRANSCRIPT_DIR, name.replace(".jsonl", ".json"))
+    if os.path.exists(path):
+        return load_jsonl_segments(path)
+    return None
+
+def check_and_propagate_shifts(draft_segments, original_segments):
+    if not original_segments:
+        return draft_segments
+
+    n_d = len(draft_segments)
+    n_o = len(original_segments)
+    
+    dp = [[0.0] * (n_o + 1) for _ in range(n_d + 1)]
+    parent = [[(0, 0)] * (n_o + 1) for _ in range(n_d + 1)]
+    
+    def get_match_score(d_idx, o_idx):
+        d_seg = draft_segments[d_idx]
+        o_seg = original_segments[o_idx]
+        score = 0.0
+        if d_seg.get("text") == o_seg.get("text") and d_seg.get("speaker") == o_seg.get("speaker") and d_seg.get("start_time") == o_seg.get("start_time") and d_seg.get("end_time") == o_seg.get("end_time"):
+            score += 100.0
+        elif d_seg.get("text") == o_seg.get("text"):
+            score += 80.0
+            
+        if d_seg.get("start_time") == o_seg.get("start_time") and d_seg.get("end_time") == o_seg.get("end_time"):
+            score += 40.0
+            
+        if d_seg.get("speaker") == o_seg.get("speaker"):
+            score += 10.0
+            
+        w1 = set(d_seg.get("text", "").lower().split())
+        w2 = set(o_seg.get("text", "").lower().split())
+        if w1 and w2:
+            intersection = w1.intersection(w2)
+            score += (len(intersection) / max(len(w1), len(w2))) * 20.0
+            
+        score += 5.0 / (1.0 + abs(d_idx - o_idx))
+        return score
+
+    for i in range(1, n_d + 1):
+        for j in range(1, n_o + 1):
+            score = get_match_score(i-1, j-1)
+            op1 = dp[i-1][j-1] + score
+            op2 = dp[i-1][j]
+            op3 = dp[i][j-1]
+            
+            best = max(op1, op2, op3)
+            dp[i][j] = best
+            
+            if best == op1:
+                parent[i][j] = (i-1, j-1)
+            elif best == op2:
+                parent[i][j] = (i-1, j)
+            else:
+                parent[i][j] = (i, j-1)
+                
+    mapping = {}
+    i, j = n_d, n_o
+    while i > 0 and j > 0:
+        pi, pj = parent[i][j]
+        if pi == i-1 and pj == j-1:
+            if get_match_score(i-1, j-1) > 2.0:
+                mapping[i-1] = j-1
+            i, j = pi, pj
+        elif pi == i-1:
+            i = pi
+        else:
+            j = pj
+
+    changed_or_propagated = [False] * n_d
+    for d_idx in range(n_d):
+        o_idx = mapping.get(d_idx)
+        if o_idx is None:
+            changed_or_propagated[d_idx] = True
+        else:
+            d_seg = draft_segments[d_idx]
+            o_seg = original_segments[o_idx]
+            if d_seg.get("start_time") != o_seg.get("start_time") or d_seg.get("end_time") != o_seg.get("end_time"):
+                changed_or_propagated[d_idx] = True
+
+    for idx in range(n_d - 1):
+        if changed_or_propagated[idx]:
+            prev_seg = draft_segments[idx]
+            next_seg = draft_segments[idx + 1]
+            
+            prev_end = to_seconds(prev_seg.get("end_time", "00:00"))
+            next_start = to_seconds(next_seg.get("start_time", "00:00"))
+            
+            if next_start < prev_end:
+                next_end = to_seconds(next_seg.get("end_time", "00:00"))
+                duration = max(0, next_end - next_start)
+                
+                new_start_str = to_time_str(prev_end)
+                new_end_str = to_time_str(prev_end + duration)
+                
+                next_seg["start_time"] = new_start_str
+                next_seg["end_time"] = new_end_str
+                
+                changed_or_propagated[idx + 1] = True
+
+    return draft_segments
+
+
 @app.route("/api/samples")
 def samples():
     """List all JSON files in transcripts/ that aren't already in finished/ with draft status."""
@@ -145,6 +269,21 @@ def save():
     data = request.json
     name    = data["name"]
     content = data["content"]
+    
+    try:
+        segments = []
+        for line in content.strip().split("\n"):
+            line = line.strip()
+            if line:
+                segments.append(json.loads(line))
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Failed to parse content: {str(e)}"}), 400
+
+    original_segments = get_original_segments(name)
+    adjusted_segments = check_and_propagate_shifts(segments, original_segments)
+    
+    content = "\n".join(json.dumps(s, ensure_ascii=False) for s in adjusted_segments)
+    
     out = os.path.join(FINISHED_DIR, name)
     with open(out, "w", encoding="utf-8") as f:
         f.write(content)
@@ -154,23 +293,43 @@ def save():
     if os.path.exists(w_path):
         os.remove(w_path)
         
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "segments": adjusted_segments})
 
 @app.route("/api/save_draft", methods=["POST"])
 def save_draft():
     data = request.json
     name    = data["name"]
     content = data["content"]
+    
+    try:
+        segments = []
+        for line in content.strip().split("\n"):
+            line = line.strip()
+            if line:
+                segments.append(json.loads(line))
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Failed to parse content: {str(e)}"}), 400
+
+    original_segments = get_original_segments(name)
+    adjusted_segments = check_and_propagate_shifts(segments, original_segments)
+    
+    content = "\n".join(json.dumps(s, ensure_ascii=False) for s in adjusted_segments)
+    
     out = os.path.join(WORKING_DIR, name)
     with open(out, "w", encoding="utf-8") as f:
         f.write(content)
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "segments": adjusted_segments})
 
 @app.route("/api/ai/correct", methods=["POST"])
 def ai_correct():
     data = request.json
     segments = data.get("segments", [])
     model = data.get("model", "gemini-3.5-flash")
+    name = data.get("name")
+    
+    if name:
+        original_segments = get_original_segments(name)
+        segments = check_and_propagate_shifts(segments, original_segments)
     
     from ai.correct import run_ai_correction
     ok, result = run_ai_correction(segments, model)
@@ -179,6 +338,7 @@ def ai_correct():
         return jsonify({"ok": False, "error": result})
         
     return jsonify({"ok": True, "segments": result})
+
 
 if __name__ == "__main__":
     print("\n✓ STT Annotator running → http://localhost:5000\n")
