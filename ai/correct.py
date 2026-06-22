@@ -138,7 +138,11 @@ def call_gemini(system_instruction, user_content, audio_path=None, model="gemini
                     err_json = json.loads(err_msg)
                     msg_detail = err_json.get("error", {}).get("message", "")
                     status_str = err_json.get("error", {}).get("status", "")
-                    if status_str == "RESOURCE_EXHAUSTED" or "Quota exceeded" in msg_detail:
+                    if "prepayment" in msg_detail.lower() or "credits" in msg_detail.lower():
+                        return {
+                            "error": f"Prepayment Credits Depleted (429). Your Google AI Studio PRO account has depleted its prepaid balance. Please go to AI Studio billing settings to add credits, or switch back to a Free Tier API Key in your .env.\n\nDetails: {msg_detail}"
+                        }
+                    elif status_str == "RESOURCE_EXHAUSTED" or "Quota exceeded" in msg_detail:
                         return {
                             "error": f"Quota Exceeded / Model Restricted (429). If using a Free Tier API Key, please switch the model dropdown to a Flash model (like 'Gemini 3.5 Flash' or 'Gemini 2.5 Flash') instead of 'Pro'.\n\nDetails: {msg_detail}"
                         }

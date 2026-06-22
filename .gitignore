@@ -12,6 +12,8 @@ transcripts/*
 finished/*
 !finished/.gitkeep
 
+
+working/
 # Python cache files
 __pycache__/
 *.py[cod]
