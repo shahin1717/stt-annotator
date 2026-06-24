@@ -102,65 +102,89 @@ def check_and_propagate_shifts(draft_segments, original_segments):
     if not original_segments:
         return draft_segments
 
+    import re
+    def get_words(text):
+        if not text:
+            return set()
+        cleaned = re.sub(r"[.,!?;:()\[\]\{\}'\"\-]", "", text.lower())
+        return set(cleaned.split())
+
     n_d = len(draft_segments)
     n_o = len(original_segments)
     
-    dp = [[0.0] * (n_o + 1) for _ in range(n_d + 1)]
-    parent = [[(0, 0)] * (n_o + 1) for _ in range(n_d + 1)]
-    
-    def get_match_score(d_idx, o_idx):
-        d_seg = draft_segments[d_idx]
-        o_seg = original_segments[o_idx]
-        score = 0.0
-        if d_seg.get("text") == o_seg.get("text") and d_seg.get("speaker") == o_seg.get("speaker") and d_seg.get("start_time") == o_seg.get("start_time") and d_seg.get("end_time") == o_seg.get("end_time"):
-            score += 100.0
-        elif d_seg.get("text") == o_seg.get("text"):
-            score += 80.0
+    if n_d == n_o:
+        mapping = {i: i for i in range(n_d)}
+    else:
+        dp = [[0.0] * (n_o + 1) for _ in range(n_d + 1)]
+        parent = [[(0, 0)] * (n_o + 1) for _ in range(n_d + 1)]
+        
+        def get_match_score(d_idx, o_idx):
+            d_seg = draft_segments[d_idx]
+            o_seg = original_segments[o_idx]
+            score = 0.0
             
-        if d_seg.get("start_time") == o_seg.get("start_time") and d_seg.get("end_time") == o_seg.get("end_time"):
-            score += 40.0
+            d_text = d_seg.get("text", "")
+            o_text = o_seg.get("text", "")
+            w1 = get_words(d_text)
+            w2 = get_words(o_text)
             
-        if d_seg.get("speaker") == o_seg.get("speaker"):
-            score += 10.0
+            has_word_overlap = bool(w1 and w2 and w1.intersection(w2))
+            has_time_match = (
+                d_seg.get("start_time") == o_seg.get("start_time") or 
+                d_seg.get("end_time") == o_seg.get("end_time")
+            )
+            has_exact_text = (d_text == o_text)
             
-        w1 = set(d_seg.get("text", "").lower().split())
-        w2 = set(o_seg.get("text", "").lower().split())
-        if w1 and w2:
-            intersection = w1.intersection(w2)
-            score += (len(intersection) / max(len(w1), len(w2))) * 20.0
-            
-        score += 5.0 / (1.0 + abs(d_idx - o_idx))
-        return score
-
-    for i in range(1, n_d + 1):
-        for j in range(1, n_o + 1):
-            score = get_match_score(i-1, j-1)
-            op1 = dp[i-1][j-1] + score
-            op2 = dp[i-1][j]
-            op3 = dp[i][j-1]
-            
-            best = max(op1, op2, op3)
-            dp[i][j] = best
-            
-            if best == op1:
-                parent[i][j] = (i-1, j-1)
-            elif best == op2:
-                parent[i][j] = (i-1, j)
-            else:
-                parent[i][j] = (i, j-1)
+            if not (has_word_overlap or has_time_match or has_exact_text):
+                return 0.0
                 
-    mapping = {}
-    i, j = n_d, n_o
-    while i > 0 and j > 0:
-        pi, pj = parent[i][j]
-        if pi == i-1 and pj == j-1:
-            if get_match_score(i-1, j-1) > 2.0:
-                mapping[i-1] = j-1
-            i, j = pi, pj
-        elif pi == i-1:
-            i = pi
-        else:
-            j = pj
+            if d_seg.get("text") == o_seg.get("text") and d_seg.get("speaker") == o_seg.get("speaker") and d_seg.get("start_time") == o_seg.get("start_time") and d_seg.get("end_time") == o_seg.get("end_time"):
+                score += 100.0
+            elif d_seg.get("text") == o_seg.get("text"):
+                score += 80.0
+                
+            if d_seg.get("start_time") == o_seg.get("start_time") and d_seg.get("end_time") == o_seg.get("end_time"):
+                score += 40.0
+                
+            if d_seg.get("speaker") == o_seg.get("speaker"):
+                score += 10.0
+                
+            if w1 and w2:
+                intersection = w1.intersection(w2)
+                score += (len(intersection) / max(len(w1), len(w2))) * 20.0
+                
+            score += 5.0 / (1.0 + abs(d_idx - o_idx))
+            return score
+
+        for i in range(1, n_d + 1):
+            for j in range(1, n_o + 1):
+                score = get_match_score(i-1, j-1)
+                op1 = dp[i-1][j-1] + score
+                op2 = dp[i-1][j]
+                op3 = dp[i][j-1]
+                
+                best = max(op1, op2, op3)
+                dp[i][j] = best
+                
+                if best == op1:
+                    parent[i][j] = (i-1, j-1)
+                elif best == op2:
+                    parent[i][j] = (i-1, j)
+                else:
+                    parent[i][j] = (i, j-1)
+                    
+        mapping = {}
+        i, j = n_d, n_o
+        while i > 0 and j > 0:
+            pi, pj = parent[i][j]
+            if pi == i-1 and pj == j-1:
+                if get_match_score(i-1, j-1) > 2.0:
+                    mapping[i-1] = j-1
+                i, j = pi, pj
+            elif pi == i-1:
+                i = pi
+            else:
+                j = pj
 
     changed_or_propagated = [False] * n_d
     for d_idx in range(n_d):
@@ -181,12 +205,24 @@ def check_and_propagate_shifts(draft_segments, original_segments):
             prev_end = to_seconds(prev_seg.get("end_time", "00:00"))
             next_start = to_seconds(next_seg.get("start_time", "00:00"))
             
-            if next_start < prev_end:
+            orig_gap = 0
+            o_idx_prev = mapping.get(idx)
+            o_idx_next = mapping.get(idx + 1)
+            if o_idx_prev is not None and o_idx_next is not None:
+                o_prev = original_segments[o_idx_prev]
+                o_next = original_segments[o_idx_next]
+                orig_prev_end = to_seconds(o_prev.get("end_time", "00:00"))
+                orig_next_start = to_seconds(o_next.get("start_time", "00:00"))
+                orig_gap = orig_next_start - orig_prev_end
+            
+            min_allowed_gap = min(0, orig_gap)
+            
+            if next_start < prev_end + min_allowed_gap:
                 next_end = to_seconds(next_seg.get("end_time", "00:00"))
                 duration = max(0, next_end - next_start)
                 
-                new_start_str = to_time_str(prev_end)
-                new_end_str = to_time_str(prev_end + duration)
+                new_start_str = to_time_str(prev_end + min_allowed_gap)
+                new_end_str = to_time_str(prev_end + min_allowed_gap + duration)
                 
                 next_seg["start_time"] = new_start_str
                 next_seg["end_time"] = new_end_str
@@ -292,10 +328,7 @@ def save():
     except Exception as e:
         return jsonify({"ok": False, "error": f"Failed to parse content: {str(e)}"}), 400
 
-    original_segments = get_original_segments(name)
-    adjusted_segments = check_and_propagate_shifts(segments, original_segments)
-    
-    content = "\n".join(serialize_segment(s) for s in adjusted_segments)
+    content = "\n".join(serialize_segment(s) for s in segments)
     
     out = os.path.join(FINISHED_DIR, name)
     with open(out, "w", encoding="utf-8") as f:
@@ -306,7 +339,7 @@ def save():
     if os.path.exists(w_path):
         os.remove(w_path)
         
-    return jsonify({"ok": True, "segments": adjusted_segments})
+    return jsonify({"ok": True, "segments": segments})
 
 @app.route("/api/save_draft", methods=["POST"])
 def save_draft():
@@ -323,15 +356,12 @@ def save_draft():
     except Exception as e:
         return jsonify({"ok": False, "error": f"Failed to parse content: {str(e)}"}), 400
 
-    original_segments = get_original_segments(name)
-    adjusted_segments = check_and_propagate_shifts(segments, original_segments)
-    
-    content = "\n".join(serialize_segment(s) for s in adjusted_segments)
+    content = "\n".join(serialize_segment(s) for s in segments)
     
     out = os.path.join(WORKING_DIR, name)
     with open(out, "w", encoding="utf-8") as f:
         f.write(content)
-    return jsonify({"ok": True, "segments": adjusted_segments})
+    return jsonify({"ok": True, "segments": segments})
 
 @app.route("/api/ai/correct", methods=["POST"])
 def ai_correct():
@@ -341,9 +371,8 @@ def ai_correct():
     name = data.get("name")
     use_audio = data.get("use_audio", False)
     
-    if name:
-        original_segments = get_original_segments(name)
-        segments = check_and_propagate_shifts(segments, original_segments)
+    # No automatic shift propagation before AI correction
+    pass
         
     audio_path = None
     if use_audio and name:
